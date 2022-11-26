@@ -1,0 +1,16 @@
+{
+    "name": "lramos1994/solarsyssvg",
+    "type": "project",
+    "autoload": {
+        "psr-4": {
+            "SolarSystemSvg\\": "src/"
+        }
+    },
+    "authors": [
+        {
+            "name": "Lucas Ramos",
+            "email": "lucas_ramos1994@hotmail.com"
+        }
+    ],
+    "require": {}
+}
