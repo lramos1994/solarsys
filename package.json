@@ -1,0 +1,25 @@
+{
+  "name": "solarsys",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.php",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/lramos1994/solarsys.git"
+  },
+  "author": "lucas ramos <lucas_ramos1994@hotmail.com>",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/lramos1994/solarsys/issues"
+  },
+  "homepage": "https://github.com/lramos1994/solarsys#readme",
+  "devDependencies": {
+    "laravel-mix": "^6.0.49",
+    "resolve-url-loader": "^5.0.0",
+    "sass": "^1.57.1",
+    "sass-loader": "^12.6.0"
+  }
+}

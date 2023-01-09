@@ -65,10 +65,15 @@ class SolarSystemSvg
         $planets = $this->getPlanets();
         
         return '
-        <svg viewBox="0 0 '.($this->system['width']+5).' '.($this->system['height']+5).'" xmlns="http://www.w3.org/2000/svg">
+        <svg class="solarsys" viewBox="0 0 '.($this->system['width']+5).' '.($this->system['height']+5).'" xmlns="http://www.w3.org/2000/svg">
             <g transform="translate(2.5 2.5)">
                 '.implode($orbits).'
-                <circle cx="'.($this->system['width']/2).'" cy="'.($this->system['height']/2).'" r="'.($this->sun['size']).'" fill="yellow"></circle>
+                    <circle 
+                        cx="'.($this->system['width']/2).'" 
+                        cy="'.($this->system['height']/2).'" 
+                        r="'.($this->sun['size']).'" 
+                        fill="yellow"
+                        class="sun"></circle>
                 '.implode($planets).'
             </g>
         </svg>';
