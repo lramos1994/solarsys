@@ -6,13 +6,15 @@ require_once __DIR__ . '/vendor/autoload.php';
 $system = new SolarSystemSvg(300, 300);
 
 $system->addPlanet(10, 80, true);
-$system->addPlanet(5, 55, true);
-$system->addPlanet(3, 35, true);
-$system->addPlanet(5, 150, true);
+// $system->addPlanet(5, 55, true);
+// $system->addPlanet(3, 35, true);
+// $system->addPlanet(5, 150, true);
 
 
 ?>
 
-<div style="width:500px;border: 1px solid;">
+<div style="width:750px;border: 1px solid;background: #000;">
     <?php echo $system->render(); ?>
 </div>
+
+<link rel="stylesheet" href="/dist/styles/main.css">

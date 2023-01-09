@@ -3,7 +3,7 @@ namespace SolarSystemSvg;
 
 class Planet
 {
-
+    public $id;
     public $size;
     public $distance;
     public $moon = false;
@@ -16,7 +16,6 @@ class Planet
         $this->moon = $moon;
         $this->system = $system;
         $this->id = uniqid(rand(), true);
-
     }
 
     public function getOrbit()
