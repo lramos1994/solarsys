@@ -37,6 +37,19 @@ class SolarSystemSvg
         return $types[$type];
     }
 
+    public function getEspecificCoordinateFromCenter($x, $y, $type, $axis)
+    {
+        $cordinates = explode(' ',$this->getCoordinateFromCenter($x, $y, $type));
+
+        if ($axis == 'x') {
+            return $cordinates[0];
+        }
+
+        if ($axis == 'y') {
+            return $cordinates[1];
+        }
+    }
+
     public function getOrbitsPath()
     {
         $orbits = [];

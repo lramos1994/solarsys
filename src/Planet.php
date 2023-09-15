@@ -3,7 +3,7 @@ namespace SolarSystemSvg;
 
 class Planet
 {
-
+    public $id;
     public $size;
     public $distance;
     public $moon = false;
@@ -40,7 +40,29 @@ class Planet
 
         $orbit = "$first_curve $second_curve $third_curve $fourth_curve";
 
-        return "<path fill='none' stroke-width='0.1' stroke='lightgrey' id='orbit-$this->id' d='$orbit' />";
+        $observable_points = "
+            <circle 
+                cx='{$this->system->getEspecificCoordinateFromCenter($distance, 0, '-', 'x')}' 
+                cy='{$this->system->getEspecificCoordinateFromCenter($distance, 0, '-', 'y')}' 
+                r='3' fill='#000'></circle>
+
+            <circle 
+                cx='{$this->system->getEspecificCoordinateFromCenter($distance, $half_distance, '-', 'x')}' 
+                cy='{$this->system->getEspecificCoordinateFromCenter($distance, $half_distance, '-', 'y')}' 
+                r='3' fill='#eee'></circle>
+            
+            <circle 
+                cx='{$this->system->getEspecificCoordinateFromCenter($half_distance, $distance, '-', 'x')}' 
+                cy='{$this->system->getEspecificCoordinateFromCenter($half_distance, $distance, '-', 'y')}' 
+                r='3' fill='#eee'></circle>
+
+            <circle 
+                cx='{$this->system->getEspecificCoordinateFromCenter(0, $distance, '-', 'x')}' 
+                cy='{$this->system->getEspecificCoordinateFromCenter(0, $distance, '-', 'y')}' 
+                r='3' fill='#eee'></circle>
+        ";
+
+        return $observable_points."<path fill='none' stroke-width='0.1' stroke='lightgrey' id='orbit-$this->id' d='$orbit' />";
     }
 
     public function getPlanet()
