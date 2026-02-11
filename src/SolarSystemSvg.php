@@ -20,7 +20,6 @@ class SolarSystemSvg
             'height' => $height,
         ];
 
-        return $this;
     }
 
     public function addPlanet($size, $distance, $moon = false)
@@ -30,33 +29,11 @@ class SolarSystemSvg
         $this->planets[] = $planet;
     }
 
-    public function getCoordinateFromCenter($x, $y, $type)
-    {
-        $types = [
-            '-' => (($this->system['width']/2)-$x).' '.(($this->system['height']/2)-$y),
-            '+' => (($this->system['width']/2)+$x).' '.(($this->system['height']/2)+$y),
-        ];
-        return $types[$type];
-    }
-
-    public function getEspecificCoordinateFromCenter($x, $y, $type, $axis)
-    {
-        $cordinates = explode(' ',$this->getCoordinateFromCenter($x, $y, $type));
-
-        if ($axis == 'x') {
-            return $cordinates[0];
-        }
-
-        if ($axis == 'y') {
-            return $cordinates[1];
-        }
-    }
-
     public function getOrbitsPath()
     {
         $orbits = [];
 
-        foreach ($this->planets as $key => $planet) {
+        foreach ($this->planets as $planet) {
             $orbits[] = $planet->getOrbit();
         }
 
@@ -67,7 +44,7 @@ class SolarSystemSvg
     {
         $planets = [];
 
-        foreach ($this->planets as $key => $planet) {
+        foreach ($this->planets as $planet) {
             $planets[] = $planet->getPlanet();
         }
 
