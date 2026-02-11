@@ -57,7 +57,14 @@ class SolarSystemSvg
         $h = $this->system['height'] + 5;
 
         $starPoints = '1,0 0.2828,0.2828 0,1 -0.2828,0.2828 -1,0 -0.2828,-0.2828 0,-1 0.2828,-0.2828';
-        $stars = "<defs><polygon id='star' points='$starPoints' /></defs>";
+        $stars = "
+            <defs>
+                <polygon id='star' points='$starPoints' />
+                <radialGradient id='star-glow'>
+                    <stop offset='0%' stop-color='white' stop-opacity='0.3' />
+                    <stop offset='100%' stop-color='white' stop-opacity='0' />
+                </radialGradient>
+            </defs>";
         $stars .= "<rect width='$w' height='$h' fill='#000' />";
 
         $colors = ['#FFFFFF', '#B0C4DE', '#FFFACD', '#FFE4B5', '#ADD8E6'];
@@ -69,7 +76,21 @@ class SolarSystemSvg
             $scale = mt_rand(1, 10) / 10;
             $opacity = mt_rand(3, 10) / 10;
             $color = $colors[mt_rand(0, count($colors) - 1)];
+            $glowR = round($scale * 2.5, 2);
+            $stars .= "<circle cx='$cx' cy='$cy' r='$glowR' fill='url(#star-glow)' />";
             $stars .= "<use xlink:href='#star' fill='$color' opacity='$opacity' transform='translate($cx $cy) scale($scale)' />";
+        }
+
+        $brightCount = mt_rand(5, 10);
+        $brightColors = ['#FFFFFF', '#E0E8FF', '#FFF8E0'];
+        for ($i = 0; $i < $brightCount; $i++) {
+            $bx = mt_rand(0, $w * 10) / 10;
+            $by = mt_rand(0, $h * 10) / 10;
+            $bScale = mt_rand(15, 25) / 10;
+            $bColor = $brightColors[mt_rand(0, count($brightColors) - 1)];
+            $bGlowR = round($bScale * 4, 2);
+            $stars .= "<circle cx='$bx' cy='$by' r='$bGlowR' fill='url(#star-glow)' />";
+            $stars .= "<use xlink:href='#star' fill='$bColor' opacity='1' transform='translate($bx $by) scale($bScale)' />";
         }
 
         return $stars;
