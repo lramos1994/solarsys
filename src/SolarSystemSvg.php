@@ -24,7 +24,7 @@ class SolarSystemSvg
 
     public function addPlanet($size, $distance, $moon = false)
     {
-        $style = (count($this->planets) % 5) + 1;
+        $style = mt_rand(1, 10);
         $planet = new Planet($size, $distance, $moon, $this, $style);
         $this->planets[] = $planet;
     }
