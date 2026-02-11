@@ -16,6 +16,11 @@ class Planet
         3 => ['light' => '#7b9cef', 'dark' => '#2a4a9a', 'stains' => ['#3a5cb0', '#6088e0', '#2a4a9a']],
         4 => ['light' => '#5dba7a', 'dark' => '#1a5c30', 'stains' => ['#1a6b8a', '#3d7a50', '#2a6040']],
         5 => ['light' => '#f0c848', 'dark' => '#8a6a10', 'stains' => ['#8b0000', '#4a0000', '#a02020']],
+        6 => ['light' => '#a8d8ea', 'dark' => '#3a6a8a', 'stains' => ['#4a7a9a', '#3a6888', '#5a8aa0']],
+        7 => ['light' => '#c87040', 'dark' => '#5a2810', 'stains' => ['#4a2008', '#6a3418', '#3e1a08']],
+        8 => ['light' => '#c8a0e0', 'dark' => '#5a3080', 'stains' => ['#4a2870', '#6a3890', '#3e2060']],
+        9 => ['light' => '#e0c890', 'dark' => '#8a7040', 'stains' => ['#7a6030', '#9a8050', '#6a5028']],
+        10 => ['light' => '#909098', 'dark' => '#303038', 'stains' => ['#282830', '#404048', '#1a1a20']],
     ];
 
     private static $moonStyles = [
@@ -24,6 +29,11 @@ class Planet
         3 => ['light' => '#f0e8c8', 'dark' => '#9a8a5a', 'stains' => ['#8a7a4a', '#a09060', '#706030']],
         4 => ['light' => '#d0a090', 'dark' => '#7a4a3a', 'stains' => ['#6a3a2a', '#8a5a4a', '#5a3020']],
         5 => ['light' => '#a0a0a8', 'dark' => '#404048', 'stains' => ['#353540', '#505058', '#2a2a30']],
+        6 => ['light' => '#d8e8f0', 'dark' => '#6888a0', 'stains' => ['#587890', '#7898b0', '#4a6880']],
+        7 => ['light' => '#b89878', 'dark' => '#5a3828', 'stains' => ['#4a2818', '#6a4838', '#3a2010']],
+        8 => ['light' => '#d8c0e8', 'dark' => '#6a4888', 'stains' => ['#5a3878', '#7a5898', '#4a2868']],
+        9 => ['light' => '#e8dcc0', 'dark' => '#8a7a58', 'stains' => ['#7a6a48', '#9a8a68', '#685838']],
+        10 => ['light' => '#787880', 'dark' => '#282830', 'stains' => ['#202028', '#383840', '#181820']],
     ];
 
     public function __construct($size, $distance, $moon, $system, $style = 1)
