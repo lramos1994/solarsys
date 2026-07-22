@@ -172,6 +172,9 @@ $spaceBg
 
         $sunDefs = '
             <defs>
+                <clipPath id="sun-clip">
+                    <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$sunR.'" />
+                </clipPath>
                 <radialGradient id="sun-grad" cx="40%" cy="40%" r="50%">
                     <stop offset="0%" stop-color="#fff" />
                     <stop offset="30%" stop-color="#ffee58" />
@@ -185,6 +188,41 @@ $spaceBg
                 </radialGradient>
             </defs>';
 
+        $sunStains = '';
+        $sunColors = ['#e65100', '#bf360c', '#ff6d00', '#d84315'];
+        $numSunStains = mt_rand(8, 14);
+        for ($s = 0; $s < $numSunStains; $s++) {
+            $sAngle = mt_rand(0, 360) * M_PI / 180;
+            $sDist = mt_rand(0, intval($sunR * 10)) / 10;
+            $sCx = round($sunCx + cos($sAngle) * $sDist, 2);
+            $sCy = round($sunCy + sin($sAngle) * $sDist, 2);
+            $sSize = $sunR * mt_rand(15, 45) / 100;
+            $sPoints = mt_rand(7, 12);
+            $sCoords = [];
+            for ($i = 0; $i < $sPoints; $i++) {
+                $a = ($i / $sPoints) * 2 * M_PI;
+                $sRadius = $sSize * mt_rand(50, 130) / 100;
+                $sx = round($sCx + cos($a) * $sRadius, 2);
+                $sy = round($sCy + sin($a) * $sRadius, 2);
+                $sCoords[] = [$sx, $sy];
+            }
+            $sN = count($sCoords);
+            $sStartX = round(($sCoords[0][0] + $sCoords[1][0]) / 2, 2);
+            $sStartY = round(($sCoords[0][1] + $sCoords[1][1]) / 2, 2);
+            $sPath = "M $sStartX $sStartY";
+            for ($i = 1; $i <= $sN; $i++) {
+                $p = $sCoords[$i % $sN];
+                $pNext = $sCoords[($i + 1) % $sN];
+                $mx = round(($p[0] + $pNext[0]) / 2, 2);
+                $my = round(($p[1] + $pNext[1]) / 2, 2);
+                $sPath .= " Q {$p[0]} {$p[1]}, $mx $my";
+            }
+            $sPath .= " Z";
+            $sColor = $sunColors[mt_rand(0, count($sunColors) - 1)];
+            $sOpacity = mt_rand(3, 6) / 10;
+            $sunStains .= '<path d="'.$sPath.'" fill="'.$sColor.'" opacity="'.$sOpacity.'" />';
+        }
+
         $bg = $this->debug ? '#fff' : '#000';
 
         return '
@@ -194,7 +232,10 @@ $spaceBg
                 '.implode($orbits).'
                 '.$sunDefs.'
                 <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$glowR.'" fill="url(#sun-glow)" />
-                <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$sunR.'" fill="url(#sun-grad)" class="sun" />
+                <g clip-path="url(#sun-clip)">
+                    <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$sunR.'" fill="url(#sun-grad)" class="sun" />
+                    '.$sunStains.'
+                </g>
                 '.implode($planets).'
             </g>
         </svg>';

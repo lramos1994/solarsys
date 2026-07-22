@@ -46,6 +46,51 @@ class Planet
         $this->id = uniqid(rand(), true);
     }
 
+    private function generateStains($r, $stains)
+    {
+        $continents = '';
+        $count = mt_rand(4, 8);
+
+        for ($c = 0; $c < $count; $c++) {
+            $color = $stains[mt_rand(0, count($stains) - 1)];
+            $angle = mt_rand(0, 360) * M_PI / 180;
+            $dist = mt_rand(0, intval($r * 10)) / 10;
+            $cx = round(cos($angle) * $dist, 2);
+            $cy = round(sin($angle) * $dist, 2);
+
+            $size = $r * mt_rand(20, 50) / 100;
+            $numPoints = mt_rand(7, 12);
+            $coords = [];
+
+            for ($i = 0; $i < $numPoints; $i++) {
+                $a = ($i / $numPoints) * 2 * M_PI;
+                $radius = $size * mt_rand(50, 130) / 100;
+                $x = round($cx + cos($a) * $radius, 2);
+                $y = round($cy + sin($a) * $radius, 2);
+                $coords[] = [$x, $y];
+            }
+
+            $n = count($coords);
+            $startX = round(($coords[0][0] + $coords[1][0]) / 2, 2);
+            $startY = round(($coords[0][1] + $coords[1][1]) / 2, 2);
+            $path = "M $startX $startY";
+
+            for ($i = 1; $i <= $n; $i++) {
+                $p = $coords[$i % $n];
+                $pNext = $coords[($i + 1) % $n];
+                $mx = round(($p[0] + $pNext[0]) / 2, 2);
+                $my = round(($p[1] + $pNext[1]) / 2, 2);
+                $path .= " Q {$p[0]} {$p[1]}, $mx $my";
+            }
+
+            $path .= " Z";
+            $opacity = mt_rand(3, 6) / 10;
+            $continents .= "<path d='$path' fill='$color' opacity='$opacity' />";
+        }
+
+        return $continents;
+    }
+
     public function getOrbit()
     {
         $cx = $this->system->system['width'] / 2;
@@ -75,34 +120,29 @@ class Planet
         $id = $this->id;
         $style = self::$styles[$this->style];
 
-        $shadowR = round($r * 1.5, 2);
-
         $defs = "
             <defs>
                 <clipPath id='clip-$id'>
                     <circle cx='0' cy='0' r='$r' />
                 </clipPath>
-                <radialGradient id='grad-$id' cx='35%' cy='35%' r='60%'>
+                <radialGradient id='grad-$id' cx='50%' cy='50%' r='50%'>
                     <stop offset='0%' stop-color='{$style['light']}' />
                     <stop offset='100%' stop-color='{$style['dark']}' />
                 </radialGradient>
-                <radialGradient id='shadow-$id'>
+                <linearGradient id='sun-shadow-$id' x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stop-color='black' stop-opacity='0.8' />
+                    <stop offset='40%' stop-color='black' stop-opacity='0.3' />
+                    <stop offset='70%' stop-color='black' stop-opacity='0' />
+                    <stop offset='100%' stop-color='black' stop-opacity='0' />
+                </linearGradient>
+                <radialGradient id='drop-shadow-$id'>
                     <stop offset='0%' stop-color='black' stop-opacity='0.6' />
-                    <stop offset='60%' stop-color='black' stop-opacity='0.3' />
+                    <stop offset='60%' stop-color='black' stop-opacity='0.2' />
                     <stop offset='100%' stop-color='black' stop-opacity='0' />
                 </radialGradient>";
 
-        $stains = '';
-        $numStains = mt_rand(3, 5);
-        for ($i = 0; $i < $numStains; $i++) {
-            $angle = mt_rand(0, 360) * M_PI / 180;
-            $dist = mt_rand(0, intval($r * 7)) / 10;
-            $sx = round(cos($angle) * $dist, 2);
-            $sy = round(sin($angle) * $dist, 2);
-            $sr = round($r * mt_rand(15, 40) / 100, 2);
-            $stainColor = $style['stains'][mt_rand(0, count($style['stains']) - 1)];
-            $stains .= "<circle cx='$sx' cy='$sy' r='$sr' fill='$stainColor' opacity='0.6' />";
-        }
+        $dropShadowR = round($r * 1.5, 2);
+        $dropShadowOffset = round($r * -0.8, 2);
 
         $moon = '';
 
@@ -116,46 +156,42 @@ class Planet
             $mk = $md * 0.5522847498;
             $moon_orbit = "M -$md 0 C -$md -$mk, -$mk -$md, 0 -$md S $md -$mk, $md 0 S $mk $md, 0 $md S -$md $mk, -$md 0 Z";
 
-            $moonShadowR = round($moon_size * 1.5, 2);
-
             $defs .= "
                 <clipPath id='clip-$mid'>
                     <circle cx='0' cy='0' r='$moon_size' />
                 </clipPath>
-                <radialGradient id='grad-$mid' cx='35%' cy='35%' r='60%'>
+                <radialGradient id='grad-$mid' cx='50%' cy='50%' r='50%'>
                     <stop offset='0%' stop-color='{$ms['light']}' />
                     <stop offset='100%' stop-color='{$ms['dark']}' />
                 </radialGradient>
-                <radialGradient id='shadow-$mid'>
+                <linearGradient id='sun-shadow-$mid' x1='0' y1='0' x2='0' y2='1'>
+                    <stop offset='0%' stop-color='black' stop-opacity='0.8' />
+                    <stop offset='40%' stop-color='black' stop-opacity='0.3' />
+                    <stop offset='70%' stop-color='black' stop-opacity='0' />
+                    <stop offset='100%' stop-color='black' stop-opacity='0' />
+                </linearGradient>
+                <radialGradient id='drop-shadow-$mid'>
                     <stop offset='0%' stop-color='black' stop-opacity='0.6' />
-                    <stop offset='60%' stop-color='black' stop-opacity='0.3' />
+                    <stop offset='60%' stop-color='black' stop-opacity='0.2' />
                     <stop offset='100%' stop-color='black' stop-opacity='0' />
                 </radialGradient>";
-
-            $moonStains = '';
-            $numMoonStains = mt_rand(2, 4);
-            for ($j = 0; $j < $numMoonStains; $j++) {
-                $ma = mt_rand(0, 360) * M_PI / 180;
-                $mdist = mt_rand(0, intval($moon_size * 7)) / 10;
-                $msx = round(cos($ma) * $mdist, 2);
-                $msy = round(sin($ma) * $mdist, 2);
-                $msr = round($moon_size * mt_rand(15, 40) / 100, 2);
-                $msColor = $ms['stains'][mt_rand(0, count($ms['stains']) - 1)];
-                $moonStains .= "<circle cx='$msx' cy='$msy' r='$msr' fill='$msColor' opacity='0.6' />";
-            }
 
             $moonOffset = round(15 * mt_rand(0, 100) / 100, 2);
 
             $moonStroke = $this->system->debug ? "stroke='lightgrey' stroke-width='0.5'" : "stroke='none'";
 
+            $moonDropR = round($moon_size * 1.5, 2);
+            $moonDropOffset = round($moon_size * -0.8, 2);
+
             $moon = "
             <path fill='none' $moonStroke d='$moon_orbit' id='planet-$this->id'></path>
             <g>
-                <circle cx='0.5' cy='0.5' r='$moonShadowR' fill='url(#shadow-$mid)' />
+                <circle cx='0' cy='$moonDropOffset' r='$moonDropR' fill='url(#drop-shadow-$mid)' />
                 <g clip-path='url(#clip-$mid)'>
                     <circle cx='0' cy='0' r='$moon_size' fill='url(#grad-$mid)'></circle>
-                    $moonStains
+                    " . $this->generateStains($moon_size, $ms['stains']) . "
                 </g>
+                <circle cx='0' cy='0' r='$moon_size' fill='url(#sun-shadow-$mid)' />
                 <animateMotion keyPoints='1;0' keyTimes='0;1' dur='15s' begin='-{$moonOffset}s' repeatCount='indefinite'>
                     <mpath xlink:href='#planet-$this->id' />
                 </animateMotion>
@@ -169,13 +205,14 @@ class Planet
 
         return "<g>
             $defs
-            <circle cx='1' cy='1' r='$shadowR' fill='url(#shadow-$id)' />
+            <circle cx='0' cy='$dropShadowOffset' r='$dropShadowR' fill='url(#drop-shadow-$id)' />
             <g clip-path='url(#clip-$id)'>
                 <circle cx='0' cy='0' r='$r' fill='url(#grad-$id)'></circle>
-                $stains
+                " . $this->generateStains($r, $style['stains']) . "
             </g>
+            <circle cx='0' cy='0' r='$r' fill='url(#sun-shadow-$id)' />
             $moon
-            <animateMotion dur='{$dur}s' begin='-{$planetOffset}s' repeatCount='indefinite'>
+            <animateMotion dur='{$dur}s' begin='-{$planetOffset}s' repeatCount='indefinite' rotate='auto'>
                 <mpath xlink:href='#orbit-$this->id' />
             </animateMotion>
         </g>";
