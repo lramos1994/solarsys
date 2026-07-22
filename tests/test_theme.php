@@ -26,4 +26,5 @@ t_match($t->ring()['bands'][0], $hex, 'ring band hex');
 t_match($t->star(), $hex, 'star hex');
 t_match($t->asteroid()['fill'], $hex, 'asteroid fill hex');
 t_match($t->comet()['tail'], $hex, 'comet tail hex');
+t_eq((new Theme(5))->star(), (new Theme(5))->star(), 'same seed -> same first star color');
 t_summary();
