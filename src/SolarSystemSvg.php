@@ -170,60 +170,16 @@ $spaceBg
         $sunR = $this->sun['size'];
         $sunCx = $this->system['width'] / 2;
         $sunCy = $this->system['height'] / 2;
+        $sunT = $this->theme->sun();
         $glowR = $sunR * 3;
 
-        $sunDefs = '
-            <defs>
-                <clipPath id="sun-clip">
-                    <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$sunR.'" />
-                </clipPath>
-                <radialGradient id="sun-grad" cx="40%" cy="40%" r="50%">
-                    <stop offset="0%" stop-color="#fff" />
-                    <stop offset="30%" stop-color="#ffee58" />
-                    <stop offset="70%" stop-color="#ff9800" />
-                    <stop offset="100%" stop-color="#e65100" />
-                </radialGradient>
-                <radialGradient id="sun-glow">
-                    <stop offset="0%" stop-color="rgba(255,200,50,0.4)" />
-                    <stop offset="50%" stop-color="rgba(255,150,0,0.15)" />
-                    <stop offset="100%" stop-color="rgba(255,100,0,0)" />
-                </radialGradient>
-            </defs>';
-
-        $sunStains = '';
-        $sunColors = ['#e65100', '#bf360c', '#ff6d00', '#d84315'];
-        $numSunStains = mt_rand(8, 14);
-        for ($s = 0; $s < $numSunStains; $s++) {
-            $sAngle = mt_rand(0, 360) * M_PI / 180;
-            $sDist = mt_rand(0, intval($sunR * 10)) / 10;
-            $sCx = round($sunCx + cos($sAngle) * $sDist, 2);
-            $sCy = round($sunCy + sin($sAngle) * $sDist, 2);
-            $sSize = $sunR * mt_rand(15, 45) / 100;
-            $sPoints = mt_rand(7, 12);
-            $sCoords = [];
-            for ($i = 0; $i < $sPoints; $i++) {
-                $a = ($i / $sPoints) * 2 * M_PI;
-                $sRadius = $sSize * mt_rand(50, 130) / 100;
-                $sx = round($sCx + cos($a) * $sRadius, 2);
-                $sy = round($sCy + sin($a) * $sRadius, 2);
-                $sCoords[] = [$sx, $sy];
-            }
-            $sN = count($sCoords);
-            $sStartX = round(($sCoords[0][0] + $sCoords[1][0]) / 2, 2);
-            $sStartY = round(($sCoords[0][1] + $sCoords[1][1]) / 2, 2);
-            $sPath = "M $sStartX $sStartY";
-            for ($i = 1; $i <= $sN; $i++) {
-                $p = $sCoords[$i % $sN];
-                $pNext = $sCoords[($i + 1) % $sN];
-                $mx = round(($p[0] + $pNext[0]) / 2, 2);
-                $my = round(($p[1] + $pNext[1]) / 2, 2);
-                $sPath .= " Q {$p[0]} {$p[1]}, $mx $my";
-            }
-            $sPath .= " Z";
-            $sColor = $sunColors[mt_rand(0, count($sunColors) - 1)];
-            $sOpacity = mt_rand(3, 6) / 10;
-            $sunStains .= '<path d="'.$sPath.'" fill="'.$sColor.'" opacity="'.$sOpacity.'" />';
-        }
+        // Flat banded sun: glow halo + corona ring + 3 tonal bands (no gradients).
+        $sun = "
+            <circle cx='$sunCx' cy='$sunCy' r='$glowR' fill='" . $sunT['glow'] . "' />
+            <circle cx='$sunCx' cy='$sunCy' r='" . round($sunR * 1.35, 2) . "' fill='none' stroke='{$sunT['corona']}' stroke-width='" . round($sunR * 0.12, 2) . "' opacity='0.5' />
+            <circle cx='$sunCx' cy='$sunCy' r='$sunR' fill='{$sunT['bands'][2]}' />
+            <circle cx='$sunCx' cy='$sunCy' r='" . round($sunR * 0.8, 2) . "' fill='{$sunT['bands'][1]}' />
+            <circle cx='" . round($sunCx - $sunR * 0.25, 2) . "' cy='" . round($sunCy - $sunR * 0.25, 2) . "' r='" . round($sunR * 0.5, 2) . "' fill='{$sunT['bands'][0]}' />";
 
         $bg = $this->debug ? '#fff' : '#000';
 
@@ -232,12 +188,7 @@ $spaceBg
             '.$background.'
             <g transform="translate(2.5 2.5)">
                 '.implode($orbits).'
-                '.$sunDefs.'
-                <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$glowR.'" fill="url(#sun-glow)" />
-                <g clip-path="url(#sun-clip)">
-                    <circle cx="'.$sunCx.'" cy="'.$sunCy.'" r="'.$sunR.'" fill="url(#sun-grad)" class="sun" />
-                    '.$sunStains.'
-                </g>
+                '.$sun.'
                 '.implode($planets).'
             </g>
         </svg>';
