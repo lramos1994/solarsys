@@ -117,10 +117,19 @@ class Planet
         $dur = mt_rand(20, 60);
         $offset = round($dur * mt_rand(0, 100) / 100, 2);
 
-        // NOTE: rings are wired into this method in Task 4 (Ring class does not exist yet).
+        $ringBack = '';
+        $ringFront = '';
+        if ($this->hasRing) {
+            $ringObj = new Ring($r, $this->id, $this->theme->ring(), mt_rand(15, 32) / 100);
+            $ringBack = $ringObj->back();
+            $ringFront = $ringObj->front();
+        }
+
         return "<g>
+            $ringBack
             <g>
                 $body
+                $ringFront
                 $moon
             </g>
             <animateMotion dur='{$dur}s' begin='-{$offset}s' repeatCount='indefinite'>
