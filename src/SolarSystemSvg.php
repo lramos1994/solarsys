@@ -8,9 +8,11 @@ class SolarSystemSvg
     public $system;
     public $planets = [];
     public $debug = false;
-    
+    public Theme $theme;
+    public $planetIndex = 0;
+
     public function __construct($width = 100, $height = 100)
-    {   
+    {
         $this->sun = [
             'size' => (($width+$height)/2.5)*0.05,
         ];
@@ -20,12 +22,12 @@ class SolarSystemSvg
             'height' => $height,
         ];
 
+        $this->theme = new Theme();
     }
 
     public function addPlanet($size, $distance, $moon = false)
     {
-        $style = mt_rand(1, 10);
-        $planet = new Planet($size, $distance, $moon, $this, $style);
+        $planet = new Planet($size, $distance, $moon, $this, $this->theme, $this->planetIndex++);
         $this->planets[] = $planet;
     }
 
