@@ -14,6 +14,11 @@ for ($i = 0; $i < 60; $i++) {
     if (strpos($svg, 'ring-clip-') !== false) {
         $found = true;
         t_contains($svg, '<ellipse', 'ringed planet draws back ellipse');
+        $pBack = strpos($svg, '<ellipse');
+        $pBody = strpos($svg, "id='clip-");
+        $pFront = strpos($svg, "id='ring-clip-");
+        t_ok($pBack !== false && $pBody !== false && $pFront !== false && $pBack < $pBody && $pBody < $pFront,
+            'occlusion order: ring back (ellipse) before disc clip, front ring after');
     }
 }
 t_ok($found, 'at least one of 60 size-10 planets has a ring');

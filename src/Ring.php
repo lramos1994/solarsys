@@ -40,6 +40,7 @@ class Ring
             <clipPath id='$clip'><rect x='-$big' y='0' width='" . ($big * 2) . "' height='$big' /></clipPath>
             <g clip-path='url(#$clip)'>
                 <path d='M -$rx 0 A $rx $ry 0 0 0 $rx 0' fill='none' stroke='{$this->t['bands'][1]}' stroke-width='" . round($this->r * 0.5, 2) . "' opacity='0.95' />
+                <path d='M " . round(-$rx * 0.82, 2) . " 0 A " . round($rx * 0.82, 2) . " " . round($ry * 0.82, 2) . " 0 0 0 " . round($rx * 0.82, 2) . " 0' fill='none' stroke='{$this->t['gap']}' stroke-width='" . round($this->r * 0.18, 2) . "' opacity='0.6' />
                 <path d='M " . round(-$rx * 0.66, 2) . " 0 A " . round($rx * 0.66, 2) . " " . round($ry * 0.66, 2) . " 0 0 0 " . round($rx * 0.66, 2) . " 0' fill='none' stroke='{$this->t['bands'][0]}' stroke-width='" . round($this->r * 0.28, 2) . "' opacity='1' />
             </g>
         </g>";
