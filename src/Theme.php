@@ -6,7 +6,7 @@ class Theme
     private array $p;      // chosen palette
     private string $name;
 
-    // 6 cohesive palettes. planetHues são harmônicos dentro de cada tema.
+    // 6 cohesive palettes; planetHues are harmonic within each theme.
     private static array $palettes = [
         'Aurora' => [
             'bg' => ['#0a1a2e', '#0e2a44', '#0a1830', '#050a18'],
@@ -77,7 +77,7 @@ class Theme
 
     public function moon(int $i): array
     {
-        $base = Color::mix($this->p['planetHues'][$i % count($this->p['planetHues'])], '#b8bcc4', 0.55);
+        $base = Color::mix($this->p['planetHues'][$i % count($this->p['planetHues'])], $this->p['stars'][count($this->p['stars']) - 1], 0.5);
         return [
             'base'  => $base,
             'light' => Color::tint($base, 0.3),
