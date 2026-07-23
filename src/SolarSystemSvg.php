@@ -114,29 +114,43 @@ class SolarSystemSvg
         $planets = $this->getPlanets();
         $background = $this->debug ? '' : $this->getBackground();
 
+        $cx = $this->system['width'] / 2;
+        $cy = $this->system['height'] / 2;
+        $w = $this->system['width'];
+        $h = $this->system['height'];
+
+        // Sun (flat banded) — from Task 5.
         $sunR = $this->sun['size'];
-        $sunCx = $this->system['width'] / 2;
-        $sunCy = $this->system['height'] / 2;
         $sunT = $this->theme->sun();
         $glowR = $sunR * 3;
-
-        // Flat banded sun: glow halo + corona ring + 3 tonal bands (no gradients).
         $sun = "
-            <circle cx='$sunCx' cy='$sunCy' r='$glowR' fill='" . $sunT['glow'] . "' />
-            <circle cx='$sunCx' cy='$sunCy' r='" . round($sunR * 1.35, 2) . "' fill='none' stroke='{$sunT['corona']}' stroke-width='" . round($sunR * 0.12, 2) . "' opacity='0.5' />
-            <circle cx='$sunCx' cy='$sunCy' r='$sunR' fill='{$sunT['bands'][2]}' />
-            <circle cx='$sunCx' cy='$sunCy' r='" . round($sunR * 0.8, 2) . "' fill='{$sunT['bands'][1]}' />
-            <circle cx='" . round($sunCx - $sunR * 0.25, 2) . "' cy='" . round($sunCy - $sunR * 0.25, 2) . "' r='" . round($sunR * 0.5, 2) . "' fill='{$sunT['bands'][0]}' />";
+            <circle cx='$cx' cy='$cy' r='$glowR' fill='" . $sunT['glow'] . "' />
+            <circle cx='$cx' cy='$cy' r='" . round($sunR * 1.35, 2) . "' fill='none' stroke='{$sunT['corona']}' stroke-width='" . round($sunR * 0.12, 2) . "' opacity='0.5' />
+            <circle cx='$cx' cy='$cy' r='$sunR' fill='{$sunT['bands'][2]}' />
+            <circle cx='$cx' cy='$cy' r='" . round($sunR * 0.8, 2) . "' fill='{$sunT['bands'][1]}' />
+            <circle cx='" . round($cx - $sunR * 0.25, 2) . "' cy='" . round($cy - $sunR * 0.25, 2) . "' r='" . round($sunR * 0.5, 2) . "' fill='{$sunT['bands'][0]}' />";
+
+        // Asteroid belt (between two orbits) + comets.
+        $belt = new AsteroidBelt($cx, $cy, $w * 0.42, $h * 0.42, $this->theme->asteroid(), $this->debug ? 0 : 90);
+        $numComets = $this->debug ? 0 : mt_rand(1, 3);
+        $cometDefs = ''; $cometMarkup = '';
+        for ($i = 0; $i < $numComets; $i++) {
+            $c = new Comet($w, $h, $this->theme->comet(), $i);
+            $cometDefs .= $c->defs();
+            $cometMarkup .= $c->render();
+        }
 
         $bg = $this->debug ? '#fff' : '#000';
-
         return '
-        <svg class="solarsys" style="background:'.$bg.'" viewBox="0 0 '.($this->system['width']+5).' '.($this->system['height']+5).'" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-            '.$background.'
+        <svg class="solarsys" style="background:' . $bg . '" viewBox="0 0 ' . ($w + 5) . ' ' . ($h + 5) . '" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+            ' . $background . '
+            ' . $belt->defs() . $cometDefs . '
             <g transform="translate(2.5 2.5)">
-                '.implode($orbits).'
-                '.$sun.'
-                '.implode($planets).'
+                ' . $belt->render() . '
+                ' . implode($orbits) . '
+                ' . $sun . '
+                ' . implode($planets) . '
+                ' . $cometMarkup . '
             </g>
         </svg>';
     }
