@@ -16,8 +16,8 @@ class AsteroidBelt
     public function defs(): string
     {
         return "<defs>
-            <symbol id='ast-a' viewBox='-1 -1 2 2'><polygon points='0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8' /></symbol>
-            <symbol id='ast-b' viewBox='-1 -1 2 2'><polygon points='0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7' /></symbol>
+            <polygon id='ast-a' points='0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8' />
+            <polygon id='ast-b' points='0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7' />
         </defs>";
     }
 
