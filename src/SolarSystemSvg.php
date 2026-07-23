@@ -124,7 +124,12 @@ class SolarSystemSvg
         $sunT = $this->theme->sun();
         $glowR = $sunR * 3;
         $sun = "
-            <circle cx='$cx' cy='$cy' r='$glowR' fill='" . $sunT['glow'] . "' />
+            <defs><radialGradient id='sun-glow-g'>
+                <stop offset='0%' stop-color='{$sunT['corona']}' stop-opacity='0.45' />
+                <stop offset='55%' stop-color='{$sunT['corona']}' stop-opacity='0.15' />
+                <stop offset='100%' stop-color='{$sunT['corona']}' stop-opacity='0' />
+            </radialGradient></defs>
+            <circle cx='$cx' cy='$cy' r='$glowR' fill='url(#sun-glow-g)' />
             <circle cx='$cx' cy='$cy' r='" . round($sunR * 1.35, 2) . "' fill='none' stroke='{$sunT['corona']}' stroke-width='" . round($sunR * 0.12, 2) . "' opacity='0.5' />
             <circle cx='$cx' cy='$cy' r='$sunR' fill='{$sunT['bands'][2]}' />
             <circle cx='$cx' cy='$cy' r='" . round($sunR * 0.8, 2) . "' fill='{$sunT['bands'][1]}' />
