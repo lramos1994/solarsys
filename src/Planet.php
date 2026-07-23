@@ -92,9 +92,11 @@ class Planet
 
         $defs = "<defs>
             <clipPath id='$clipId'><circle cx='0' cy='0' r='$r' /></clipPath>
-            <filter id='$shadowId' x='-50%' y='-50%' width='200%' height='200%'>
-                <feGaussianBlur stdDeviation='" . round($r * 0.12, 2) . "' />
-            </filter>
+            <radialGradient id='$shadowId'>
+                <stop offset='0%' stop-color='" . Color::rgba('#000000', 0.45) . "' />
+                <stop offset='65%' stop-color='" . Color::rgba('#000000', 0.18) . "' />
+                <stop offset='100%' stop-color='" . Color::rgba('#000000', 0) . "' />
+            </radialGradient>
         </defs>";
 
         $termCx = round($r * 0.55, 2);
@@ -103,7 +105,7 @@ class Planet
 
         $body = "
             $defs
-            <circle cx='0.6' cy='0.9' r='" . round($r * 1.15, 2) . "' fill='" . Color::rgba('#000000', 0.35) . "' filter='url(#$shadowId)' />
+            <circle cx='" . round($r * 0.18, 2) . "' cy='" . round($r * 0.28, 2) . "' r='" . round($r * 1.5, 2) . "' fill='url(#$shadowId)' />
             <circle cx='0' cy='0' r='" . round($r * 1.18, 2) . "' fill='none' stroke='{$st['atmosphere']}' stroke-width='" . round($r * 0.16, 2) . "' id='$atmId' />
             <g clip-path='url(#$clipId)'>
                 <circle cx='0' cy='0' r='$r' fill='{$st['base']}' />

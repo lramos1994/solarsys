@@ -60,7 +60,7 @@ class SolarSystemSvg
         $bg = $this->theme->background();
 
         $defs = "<defs>
-            <symbol id='star-s' viewBox='-1 -1 2 2'><circle cx='0' cy='0' r='1' /></symbol>
+            <circle id='star-s' cx='0' cy='0' r='1' />
             <radialGradient id='star-glow'>
                 <stop offset='0%' stop-color='white' stop-opacity='0.18' />
                 <stop offset='100%' stop-color='white' stop-opacity='0' />
@@ -136,7 +136,7 @@ class SolarSystemSvg
             <circle cx='" . round($cx - $sunR * 0.25, 2) . "' cy='" . round($cy - $sunR * 0.25, 2) . "' r='" . round($sunR * 0.5, 2) . "' fill='{$sunT['bands'][0]}' />";
 
         // Asteroid belt (between two orbits) + comets.
-        $belt = new AsteroidBelt($cx, $cy, $w * 0.42, $h * 0.42, $this->theme->asteroid(), $this->debug ? 0 : 90);
+        $belt = new AsteroidBelt($cx, $cy, $w * 0.42, $h * 0.42, $this->theme->asteroid(), $this->debug ? 0 : 130);
         $numComets = $this->debug ? 0 : mt_rand(1, 3);
         $cometDefs = ''; $cometMarkup = '';
         for ($i = 0; $i < $numComets; $i++) {
