@@ -60,7 +60,7 @@ class SolarSystemSvg
         $bg = $this->theme->background();
 
         $defs = "<defs>
-            <symbol id='star-s' viewBox='-1 -1 2 2'><circle cx='0' cy='0' r='1' /></symbol>
+            <circle id='star-s' cx='0' cy='0' r='1' />
             <radialGradient id='star-glow'>
                 <stop offset='0%' stop-color='white' stop-opacity='0.18' />
                 <stop offset='100%' stop-color='white' stop-opacity='0' />
