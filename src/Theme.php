@@ -121,8 +121,9 @@ class Theme
 
     public function asteroid(): array
     {
-        $a = Color::shade($this->p['planetHues'][0], 0.45);
-        return ['fill' => $a, 'stroke' => Color::shade($a, 0.4)];
+        // Lit rock: planet hue lightened toward the theme's softest star tint so it reads against the dark nebula.
+        $rock = Color::shade(Color::mix($this->p['planetHues'][0], $this->p['stars'][count($this->p['stars']) - 1], 0.5), 0.12);
+        return ['fill' => $rock, 'stroke' => Color::shade($rock, 0.45)];
     }
 
     public function comet(): array

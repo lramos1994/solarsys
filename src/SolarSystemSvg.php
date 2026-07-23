@@ -136,7 +136,7 @@ class SolarSystemSvg
             <circle cx='" . round($cx - $sunR * 0.25, 2) . "' cy='" . round($cy - $sunR * 0.25, 2) . "' r='" . round($sunR * 0.5, 2) . "' fill='{$sunT['bands'][0]}' />";
 
         // Asteroid belt (between two orbits) + comets.
-        $belt = new AsteroidBelt($cx, $cy, $w * 0.42, $h * 0.42, $this->theme->asteroid(), $this->debug ? 0 : 90);
+        $belt = new AsteroidBelt($cx, $cy, $w * 0.42, $h * 0.42, $this->theme->asteroid(), $this->debug ? 0 : 130);
         $numComets = $this->debug ? 0 : mt_rand(1, 3);
         $cometDefs = ''; $cometMarkup = '';
         for ($i = 0; $i < $numComets; $i++) {
