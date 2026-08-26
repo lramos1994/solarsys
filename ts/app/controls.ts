@@ -99,6 +99,7 @@ export function controlsMarkup(input: RawSceneInput): string {
     `<select id="palette" data-control="palette">${paletteOptions}</select>` +
     `</div>` +
     field('seed', 'Seed', 'seed', input.seed) +
+    `<button type="button" data-action="new-seed">New seed</button>` +
     `</fieldset>` +
     input.planets.map(planetFieldset).join('') +
     `<button type="button" data-action="add-planet">Add planet</button>`

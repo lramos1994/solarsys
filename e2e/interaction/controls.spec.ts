@@ -287,6 +287,58 @@ test.describe('palette selection (CTL-005)', () => {
   });
 });
 
+test.describe('seed control (CTL-006)', () => {
+  test('displays the seed that produced the current scene', async ({ page }) => {
+    await expect(page.locator('[data-control="seed"]')).toHaveValue('20260826');
+    await expect(page.locator('[data-role="current-seed"]')).toHaveText('20260826');
+  });
+
+  test('reproduces a scene when the same seed is entered again', async ({ page }) => {
+    const seed = page.locator('[data-control="seed"]');
+
+    await setValue(seed, '42');
+    const expected = await page.locator('#preview').innerHTML();
+
+    await setValue(seed, '43');
+    await setValue(seed, '42');
+
+    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
+    expect(await page.locator('#preview').innerHTML()).toBe(expected);
+  });
+
+  test('preserves the current seed when another parameter changes', async ({ page }) => {
+    const seed = page.locator('[data-control="seed"]');
+
+    await setValue(seed, '42');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
+
+    await expect(seed).toHaveValue('42');
+    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
+  });
+
+  test('generates and displays a different seed on request', async ({ page }) => {
+    const seed = page.locator('[data-control="seed"]');
+    const beforeSeed = await seed.inputValue();
+    const beforeScene = await page.locator('#preview').innerHTML();
+
+    await page.locator('[data-action="new-seed"]').click();
+
+    const afterSeed = await seed.inputValue();
+
+    expect(afterSeed).not.toBe(beforeSeed);
+    await expect(page.locator('[data-role="current-seed"]')).toHaveText(afterSeed);
+    expect(await page.locator('#preview').innerHTML()).not.toBe(beforeScene);
+  });
+
+  test('retains the displayed seed when a pending seed is invalid', async ({ page }) => {
+    await setValue(page.locator('[data-control="seed"]'), '42');
+    await setValue(page.locator('[data-control="seed"]'), 'not-a-seed');
+
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
+    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
+  });
+});
+
 test.describe('invalid input (CTL-007)', () => {
   test('reports the rejection and keeps the previous scene', async ({ page }) => {
     const before = await page.locator('#preview').innerHTML();

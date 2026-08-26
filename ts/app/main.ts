@@ -3,6 +3,17 @@ import { createSceneStore } from './store';
 import type { RawSceneInput } from './validation';
 
 /**
+ * Pick browser entropy for a new user-requested seed, never for generation.
+ * The generator remains pure and deterministic: this only chooses its next
+ * input. Incrementing the one collision guarantees the requested seed differs.
+ */
+function newSeedExcluding(current: number | null): number {
+  const candidate = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+
+  return candidate === current ? (candidate + 1) >>> 0 : candidate;
+}
+
+/**
  * Application shell (CTL-001, CTL-002, CTL-007).
  *
  * The generator stays DOM-free (D-18, D-21); this module owns the DOM. It
@@ -16,14 +27,16 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
   root.innerHTML =
     `<form id="controls" novalidate>${controlsMarkup(initial)}</form>` +
+    `<p>Current scene seed: <output data-role="current-seed"></output></p>` +
     `<ul data-role="errors"></ul>` +
     `<div id="preview"></div>`;
 
   const form = root.querySelector<HTMLFormElement>('#controls');
   const preview = root.querySelector<HTMLElement>('#preview');
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
+  const seedDisplay = root.querySelector<HTMLOutputElement>('[data-role="current-seed"]');
 
-  if (!form || !preview || !errorList) {
+  if (!form || !preview || !errorList || !seedDisplay) {
     throw new Error('Application shell failed to mount its own markup.');
   }
 
@@ -44,6 +57,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     errorList!.innerHTML = state.errors
       .map((error) => `<li data-field="${error.field}">${error.message}</li>`)
       .join('');
+    seedDisplay!.value = state.seed === null ? '' : String(state.seed);
   }
 
   store.subscribe(render);
@@ -76,6 +90,17 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     }
 
     const input = readControls(form);
+
+    if (button.dataset.action === 'new-seed') {
+      form.innerHTML = controlsMarkup({
+        ...input,
+        seed: String(newSeedExcluding(store.getState().seed)),
+      });
+      submit();
+
+      return;
+    }
+
     let planets: readonly RawSceneInput['planets'][number][];
 
     if (button.dataset.action === 'add-planet') {
