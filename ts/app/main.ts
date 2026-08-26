@@ -52,8 +52,19 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     store.submit(readControls(form!));
   }
 
-  // `change` covers text commits and checkbox toggles alike.
-  form.addEventListener('change', submit);
+  form.addEventListener('change', (event) => {
+    // Moon fields are conditional. Rebuild the controls from the just-edited
+    // raw input when the checkbox toggles, then use the same validated submit
+    // path as every other field update.
+    if (
+      event.target instanceof HTMLInputElement &&
+      event.target.dataset.control === 'moonEnabled'
+    ) {
+      form.innerHTML = controlsMarkup(readControls(form));
+    }
+
+    submit();
+  });
 
   form.addEventListener('click', (event) => {
     const button = event.target instanceof Element

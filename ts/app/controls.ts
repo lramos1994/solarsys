@@ -1,5 +1,5 @@
 import { PALETTE_NAMES } from '../generator/palette';
-import type { RawPlanetInput, RawSceneInput } from './validation';
+import type { RawMoonInput, RawPlanetInput, RawSceneInput } from './validation';
 
 /**
  * Control surface markup and reading (CTL-001, CTL-002).
@@ -29,6 +29,13 @@ export const DEFAULT_PLANET: RawPlanetInput = {
   moon: false,
 };
 
+/** Defaults applied when a user enables a moon (CTL-004, D-04). */
+export const DEFAULT_MOON: RawMoonInput = {
+  size: '5',
+  distance: '32',
+  period: '15',
+};
+
 function field(
   id: string,
   label: string,
@@ -46,7 +53,7 @@ function field(
 function planetFieldset(planet: RawPlanetInput, index: number): string {
   const moonEnabled = planet.moon !== false;
   const moon = planet.moon === false
-    ? { size: '5', distance: '32', period: '15' }
+    ? DEFAULT_MOON
     : planet.moon;
 
   return (
@@ -59,9 +66,11 @@ function planetFieldset(planet: RawPlanetInput, index: number): string {
     `<input id="planet-${index}-moon" data-control="moonEnabled" type="checkbox"` +
     `${moonEnabled ? ' checked' : ''}/>` +
     `</div>` +
-    field(`planet-${index}-moon-size`, 'Moon size', 'moonSize', moon.size) +
-    field(`planet-${index}-moon-distance`, 'Moon distance', 'moonDistance', moon.distance) +
-    field(`planet-${index}-moon-period`, 'Moon period', 'moonPeriod', moon.period) +
+    (moonEnabled
+      ? field(`planet-${index}-moon-size`, 'Moon size', 'moonSize', moon.size) +
+        field(`planet-${index}-moon-distance`, 'Moon distance', 'moonDistance', moon.distance) +
+        field(`planet-${index}-moon-period`, 'Moon period', 'moonPeriod', moon.period)
+      : '') +
     `<button type="button" data-action="remove-planet" data-index="${index}">` +
     `Remove planet ${index + 1}</button>` +
     `</fieldset>`
@@ -99,8 +108,8 @@ export function readControls(root: ParentNode): RawSceneInput {
   const planets: RawPlanetInput[] = [
     ...root.querySelectorAll<HTMLFieldSetElement>('[data-planet]'),
   ].map((fieldset) => {
-    const read = (control: string): string =>
-      fieldset.querySelector<HTMLInputElement>(`[data-control="${control}"]`)?.value ?? '';
+    const read = (control: string, fallback = ''): string =>
+      fieldset.querySelector<HTMLInputElement>(`[data-control="${control}"]`)?.value ?? fallback;
     const enabled =
       fieldset.querySelector<HTMLInputElement>('[data-control="moonEnabled"]')?.checked ??
       false;
@@ -110,9 +119,9 @@ export function readControls(root: ParentNode): RawSceneInput {
       distance: read('planetDistance'),
       moon: enabled
         ? {
-            size: read('moonSize'),
-            distance: read('moonDistance'),
-            period: read('moonPeriod'),
+            size: read('moonSize', DEFAULT_MOON.size),
+            distance: read('moonDistance', DEFAULT_MOON.distance),
+            period: read('moonPeriod', DEFAULT_MOON.period),
           }
         : false,
     };

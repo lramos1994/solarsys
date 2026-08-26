@@ -188,6 +188,64 @@ test.describe('planet composition (CTL-003)', () => {
   });
 });
 
+test.describe('moon configuration (CTL-004)', () => {
+  test('enabling a moon reveals its controls, uses the 15-second default, and renders it', async ({ page }) => {
+    const planet = page.locator('#controls [data-planet]').first();
+
+    // Planet 1 starts with no moon, so moon-specific controls must not be
+    // exposed until the feature is enabled.
+    await expect(planet.locator('[data-control="moonSize"]')).toHaveCount(0);
+    await expect(planet.locator('[data-control="moonDistance"]')).toHaveCount(0);
+    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
+
+    await planet.locator('[data-control="moonEnabled"]').check();
+
+    await expect(planet.locator('[data-control="moonSize"]')).toBeVisible();
+    await expect(planet.locator('[data-control="moonDistance"]')).toBeVisible();
+    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveValue('15');
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(2);
+    await expect(
+      page.locator('#preview [data-role="planet"].ss-animated').first()
+        .locator(':scope > [data-role="moon"] > animateMotion'),
+    ).toHaveAttribute('dur', '15s');
+  });
+
+  test('disabling a moon hides its controls and removes it from the preview', async ({ page }) => {
+    const planet = page.locator('#controls [data-planet]').nth(1);
+
+    // Planet 2 starts with the default moon enabled.
+    await expect(planet.locator('[data-control="moonSize"]')).toBeVisible();
+    await expect(planet.locator('[data-control="moonDistance"]')).toBeVisible();
+    await expect(planet.locator('[data-control="moonPeriod"]')).toBeVisible();
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
+
+    await planet.locator('[data-control="moonEnabled"]').uncheck();
+
+    await expect(planet.locator('[data-control="moonSize"]')).toHaveCount(0);
+    await expect(planet.locator('[data-control="moonDistance"]')).toHaveCount(0);
+    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(0);
+  });
+
+  test('applies configured moon size, distance, and period to the preview', async ({ page }) => {
+    const planet = page.locator('#controls [data-planet]').nth(1);
+    const renderedPlanet = page.locator('#preview [data-role="planet"].ss-animated').nth(1);
+
+    await setValue(planet.locator('[data-control="moonSize"]'), '8');
+    await setValue(planet.locator('[data-control="moonDistance"]'), '40');
+    await setValue(planet.locator('[data-control="moonPeriod"]'), '30');
+
+    await expect(
+      renderedPlanet.locator(':scope > [data-role="moon"] [data-role="moon-body"]'),
+    ).toHaveAttribute('r', '8');
+    await expect(renderedPlanet.locator(':scope > [data-role="moon-orbit"]'))
+      .toHaveAttribute('d', /^M -40 0/);
+    await expect(renderedPlanet.locator(':scope > [data-role="moon"] > animateMotion'))
+      .toHaveAttribute('dur', '30s');
+  });
+});
+
 test.describe('invalid input (CTL-007)', () => {
   test('reports the rejection and keeps the previous scene', async ({ page }) => {
     const before = await page.locator('#preview').innerHTML();
