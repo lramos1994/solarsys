@@ -141,6 +141,53 @@ test.describe('orbital distance forms (CTL-002)', () => {
   });
 });
 
+test.describe('planet composition (CTL-003)', () => {
+  test('adds a planet and its own orbit to the preview', async ({ page }) => {
+    const planets = page.locator('#controls [data-planet]');
+    const orbits = page.locator('#preview [data-role="orbit"]');
+
+    await expect(planets).toHaveCount(3);
+    await expect(orbits).toHaveCount(3);
+
+    await page.locator('[data-action="add-planet"]').click();
+
+    await expect(planets).toHaveCount(4);
+    await expect(orbits).toHaveCount(4);
+    await expect(planets.nth(3).locator('[data-control="planetSize"]')).toHaveValue('10');
+    await expect(planets.nth(3).locator('[data-control="planetDistance"]')).toHaveValue('150');
+  });
+
+  test('removes the selected planet, its orbit, and its moon', async ({ page }) => {
+    const planets = page.locator('#controls [data-planet]');
+
+    await expect(planets).toHaveCount(3);
+    await expect(page.locator('#preview [data-role="orbit"]')).toHaveCount(3);
+    // Planet 2 is the default planet that has a moon.
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
+
+    await planets.nth(1).locator('[data-action="remove-planet"]').click();
+
+    await expect(planets).toHaveCount(2);
+    await expect(page.locator('#preview [data-role="orbit"]')).toHaveCount(2);
+    await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(0);
+  });
+
+  test('keeps a valid ambient scene after removing the last planet', async ({ page }) => {
+    const planets = page.locator('#controls [data-planet]');
+
+    while ((await planets.count()) > 0) {
+      await planets.first().locator('[data-action="remove-planet"]').click();
+    }
+
+    await expect(planets).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="orbit"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-sun-body]')).toHaveCount(1);
+    await expect(page.locator('#preview [data-role="nebula"]')).not.toHaveCount(0);
+    await expect(page.locator('#preview [data-role="asteroid-belt"]')).not.toHaveCount(0);
+    await expect(page.locator('#preview [data-role="comet"]')).not.toHaveCount(0);
+  });
+});
+
 test.describe('invalid input (CTL-007)', () => {
   test('reports the rejection and keeps the previous scene', async ({ page }) => {
     const before = await page.locator('#preview').innerHTML();

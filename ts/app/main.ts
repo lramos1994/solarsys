@@ -1,4 +1,4 @@
-import { controlsMarkup, DEFAULT_INPUT, readControls } from './controls';
+import { controlsMarkup, DEFAULT_INPUT, DEFAULT_PLANET, readControls } from './controls';
 import { createSceneStore } from './store';
 import type { RawSceneInput } from './validation';
 
@@ -54,6 +54,39 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
   // `change` covers text commits and checkbox toggles alike.
   form.addEventListener('change', submit);
+
+  form.addEventListener('click', (event) => {
+    const button = event.target instanceof Element
+      ? event.target.closest<HTMLButtonElement>('button[data-action]')
+      : null;
+
+    if (!button) {
+      return;
+    }
+
+    const input = readControls(form);
+    let planets: readonly RawSceneInput['planets'][number][];
+
+    if (button.dataset.action === 'add-planet') {
+      planets = [...input.planets, { ...DEFAULT_PLANET }];
+    } else if (button.dataset.action === 'remove-planet') {
+      const index = Number(button.dataset.index);
+
+      if (!Number.isInteger(index)) {
+        return;
+      }
+
+      planets = input.planets.filter((_, candidate) => candidate !== index);
+    } else {
+      return;
+    }
+
+    form.innerHTML = controlsMarkup({
+      ...input,
+      planets,
+    });
+    submit();
+  });
 
   submit();
   render();

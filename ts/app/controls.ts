@@ -22,6 +22,13 @@ export const DEFAULT_INPUT: RawSceneInput = {
   ],
 };
 
+/** Defaults for a newly added planet (CTL-003). */
+export const DEFAULT_PLANET: RawPlanetInput = {
+  size: '10',
+  distance: '150',
+  moon: false,
+};
+
 function field(
   id: string,
   label: string,
