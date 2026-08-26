@@ -1,5 +1,10 @@
 import { PALETTE_NAMES } from '../generator/palette';
-import type { RawMoonInput, RawPlanetInput, RawSceneInput } from './validation';
+import {
+  RANDOM_PALETTE,
+  type RawMoonInput,
+  type RawPlanetInput,
+  type RawSceneInput,
+} from './validation';
 
 /**
  * Control surface markup and reading (CTL-001, CTL-002).
@@ -14,7 +19,7 @@ export const DEFAULT_INPUT: RawSceneInput = {
   canvasWidth: '600',
   canvasHeight: '600',
   seed: '20260826',
-  palette: 'Aurora',
+  palette: RANDOM_PALETTE,
   planets: [
     { size: '12', distance: '110', moon: false },
     { size: '18', distance: '190', moon: { size: '5', distance: '32', period: '15' } },
@@ -79,7 +84,7 @@ function planetFieldset(planet: RawPlanetInput, index: number): string {
 
 /** Render the full control surface for a given raw input. */
 export function controlsMarkup(input: RawSceneInput): string {
-  const paletteOptions = PALETTE_NAMES.map(
+  const paletteOptions = [RANDOM_PALETTE, ...PALETTE_NAMES].map(
     (name) =>
       `<option value="${name}"${name === input.palette ? ' selected' : ''}>${name}</option>`,
   ).join('');

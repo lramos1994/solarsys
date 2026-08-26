@@ -33,6 +33,9 @@ export const BOUNDS = {
 
 export type BoundedField = keyof typeof BOUNDS;
 
+/** UI-only selector value: the generator chooses a palette from the seed. */
+export const RANDOM_PALETTE = 'Random';
+
 export interface RawMoonInput {
   size: string;
   distance: string;
@@ -190,14 +193,17 @@ export function validateScene(input: RawSceneInput): ValidationResult {
   const height = parseBounded(input.canvasHeight, 'canvasHeight', errors);
   const seed = parseBounded(input.seed, 'seed', errors);
 
-  const palette = PALETTE_NAMES.includes(input.palette as PaletteName)
-    ? (input.palette as PaletteName)
-    : null;
+  const palette =
+    input.palette === RANDOM_PALETTE
+      ? undefined
+      : PALETTE_NAMES.includes(input.palette as PaletteName)
+        ? (input.palette as PaletteName)
+        : null;
 
   if (palette === null) {
     errors.push({
       field: 'palette',
-      message: `Palette must be one of ${PALETTE_NAMES.join(', ')}.`,
+      message: `Palette must be ${RANDOM_PALETTE}, or one of ${PALETTE_NAMES.join(', ')}.`,
     });
   }
 
@@ -220,6 +226,11 @@ export function validateScene(input: RawSceneInput): ValidationResult {
   }
 
   const canvas: Canvas = { width, height };
+  const params: SceneParams = { canvas, planets };
 
-  return { ok: true, params: { canvas, planets, palette }, seed };
+  if (palette !== undefined) {
+    params.palette = palette;
+  }
+
+  return { ok: true, params, seed };
 }

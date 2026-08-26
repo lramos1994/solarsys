@@ -246,6 +246,47 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 });
 
+test.describe('palette selection (CTL-005)', () => {
+  test('offers Random plus the six preserved palettes, with Random selected by default', async ({ page }) => {
+    const palette = page.locator('[data-control="palette"]');
+
+    await expect(palette).toHaveValue('Random');
+    await expect(palette.locator('option')).toHaveText([
+      'Random',
+      'Aurora',
+      'Ember',
+      'Abissal',
+      'Amethyst',
+      'Verdant',
+      'Mono',
+    ]);
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);
+
+    // Random selection is still deterministic for a given seed and must
+    // resolve to one of the six real scene palettes, never a literal label.
+    const description = await page.locator('#preview desc').textContent();
+    expect(description).toMatch(
+      /Aurora|Ember|Abissal|Amethyst|Verdant|Mono/,
+    );
+  });
+
+  test('applies a selected named palette and retains it when another parameter changes', async ({ page }) => {
+    const palette = page.locator('[data-control="palette"]');
+    const description = page.locator('#preview desc');
+
+    await palette.selectOption('Ember');
+
+    await expect(palette).toHaveValue('Ember');
+    await expect(description).toContainText('Ember');
+
+    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
+
+    await expect(palette).toHaveValue('Ember');
+    await expect(description).toContainText('Ember');
+    expect(await viewBox(page)).toContain('645');
+  });
+});
+
 test.describe('invalid input (CTL-007)', () => {
   test('reports the rejection and keeps the previous scene', async ({ page }) => {
     const before = await page.locator('#preview').innerHTML();

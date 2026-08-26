@@ -215,6 +215,16 @@ describe('baseline invalid-input cases', () => {
   it('rejects an unknown palette name', () => {
     expect(validateScene(input({ palette: 'Neon' })).ok).toBe(false);
   });
+
+  it('maps the Random UI option to generator-owned palette selection', () => {
+    const result = validateScene(input({ palette: 'Random' }));
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.params).not.toHaveProperty('palette');
+    }
+  });
 });
 
 describe('rejection semantics', () => {
