@@ -166,17 +166,20 @@ export function renderAsteroidBelt(
   }
 
   const duration = randomInt(random, 120, 240);
+  const beltId = ids.next('belt-group');
 
   return (
     `<defs>` +
     `<polygon id="${shapeA}" points="0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8"/>` +
     `<polygon id="${shapeB}" points="0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7"/>` +
     `</defs>` +
-    `<g data-role="asteroid-belt">` +
+    `<g data-role="asteroid-belt" class="ss-animated">` +
     `<animateTransform attributeName="transform" type="rotate"` +
     ` from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="${duration}s" repeatCount="indefinite"/>` +
-    bodies +
-    `</g>`
+    `<g id="${beltId}">${bodies}</g>` +
+    `</g>` +
+    // Static twin at the belt's unrotated rest position (QLT-005).
+    `<g data-role="asteroid-belt" class="ss-static"><use href="#${beltId}"/></g>`
   );
 }
 
@@ -211,6 +214,8 @@ export function renderComets(
     const headRadius = 2.2;
     const mid = round(-length * 0.5);
 
+    const cometId = ids.next('comet-body');
+
     out +=
       `<defs>` +
       `<linearGradient id="${tailId}" x1="0" y1="0" x2="1" y2="0">` +
@@ -223,7 +228,8 @@ export function renderComets(
       `<stop offset="100%" stop-color="${rgba(tint(palette.accent, 0.4), 0)}"/>` +
       `</radialGradient>` +
       `</defs>` +
-      `<g data-role="comet">` +
+      `<g data-role="comet" class="ss-animated">` +
+      `<g id="${cometId}">` +
       `<path data-role="comet-tail"` +
       ` d="M 0 0 Q ${mid} ${-halfWidth}, ${-length} 0 Q ${mid} ${halfWidth}, 0 0 Z"` +
       ` fill="url(#${tailId})"/>` +
@@ -231,8 +237,14 @@ export function renderComets(
       ` fill="url(#${headId})"/>` +
       `<circle data-role="comet-head" cx="0" cy="0" r="${headRadius}"` +
       ` fill="${tint(palette.accent, 0.4)}"/>` +
+      `</g>` +
       `<animateMotion dur="${duration}s" begin="${begin}s" repeatCount="indefinite"` +
       ` rotate="auto" path="${path}"/>` +
+      `</g>` +
+      // Static twin resting at the comet's path start (QLT-005).
+      `<g data-role="comet" class="ss-static"` +
+      ` transform="translate(${-COMET_OVERSHOOT} ${startY})">` +
+      `<use href="#${cometId}"/>` +
       `</g>`;
   }
 

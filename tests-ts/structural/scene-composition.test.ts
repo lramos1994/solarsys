@@ -60,11 +60,13 @@ describe('scene composition', () => {
     );
     // `:scope >` matters: a descendant selector would match the MOON's
     // animateMotion first, since it is nested inside the planet group.
-    const planetRefs = [...document.querySelectorAll('g[data-role="planet"]')].map(
-      (element) =>
-        element
-          .querySelector(':scope > animateMotion > mpath')
-          ?.getAttribute('xlink:href'),
+    // Only the animated variant carries motion; twins are static by design.
+    const planetRefs = [
+      ...document.querySelectorAll('g[data-role="planet"].ss-animated'),
+    ].map((element) =>
+      element
+        .querySelector(':scope > animateMotion > mpath')
+        ?.getAttribute('xlink:href'),
     );
 
     for (const reference of planetRefs) {

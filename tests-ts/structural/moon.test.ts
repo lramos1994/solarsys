@@ -27,7 +27,7 @@ function moon(overrides: { size?: number; distance?: number; period?: number } =
     palette: PALETTE,
     ids: createIdGenerator(42),
     random: createPrng(42),
-  });
+  }).markup;
 }
 
 function parse(markup: string): Document {

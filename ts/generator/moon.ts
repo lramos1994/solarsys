@@ -44,6 +44,19 @@ function moonOrbitPath(distance: number): string {
   );
 }
 
+export interface MoonRenderResult {
+  /** Animated moon markup, emitted inside the planet's animated group. */
+  markup: string;
+  /**
+   * Id of the moon's visual group, carrying no animation. The planet's
+   * reduced-motion twin references this so the clone stays genuinely static:
+   * a `<use>` of an animated subtree keeps animating in the shadow tree.
+   */
+  bodyId: string;
+  /** The moon's t=0 rest offset from its parent planet. */
+  rest: { x: number; y: number };
+}
+
 /**
  * Render a moon orbiting its parent planet.
  *
@@ -51,7 +64,7 @@ function moonOrbitPath(distance: number): string {
  * the moon is carried along the planet's orbit while independently orbiting it
  * (GEN-008). `keyPoints="1;0"` reverses travel relative to the planet.
  */
-export function renderMoon(options: MoonOptions): string {
+export function renderMoon(options: MoonOptions): MoonRenderResult {
   const { moon, index, palette, ids, random } = options;
   const debug = options.debug ?? false;
   const { size, distance } = moon;
@@ -60,6 +73,7 @@ export function renderMoon(options: MoonOptions): string {
 
   const orbitId = ids.next('moon-orbit');
   const clipId = ids.next('moon-clip');
+  const bodyId = ids.next('moon-body-group');
   const offset = round(period * (random.next() * 100) / 100);
 
   // The moon orbit is a motion path, invisible in normal mode; debug exposes
@@ -68,10 +82,11 @@ export function renderMoon(options: MoonOptions): string {
     ? `stroke="lightgrey" stroke-width="0.5"`
     : `stroke="none"`;
 
-  return (
+  const markup =
     `<path data-role="moon-orbit" id="${orbitId}" fill="none" ${orbitStroke}` +
     ` d="${moonOrbitPath(distance)}"/>` +
     `<g data-role="moon">` +
+    `<g id="${bodyId}">` +
     `<clipPath id="${clipId}"><circle cx="0" cy="0" r="${size}"/></clipPath>` +
     `<circle data-role="moon-shadow" cx="0.4" cy="0.5" r="${round(size * 1.2)}"` +
     ` fill="${rgba('#000000', 0.3)}"/>` +
@@ -82,10 +97,14 @@ export function renderMoon(options: MoonOptions): string {
     `<circle data-role="moon-terminator" cx="${round(size * 0.5)}" cy="${round(size * 0.35)}"` +
     ` r="${round(size * 1.1)}" fill="${tones.dark}" opacity="0.5"/>` +
     `</g>` +
+    `</g>` +
     `<animateMotion keyPoints="1;0" keyTimes="0;1" dur="${period}s"` +
     ` begin="-${offset}s" repeatCount="indefinite">` +
     `<mpath xlink:href="#${orbitId}"/>` +
     `</animateMotion>` +
-    `</g>`
-  );
+    `</g>`;
+
+  // keyPoints="1;0" starts the moon at the END of its path, which for this
+  // closed circle is the same point as the start: (-distance, 0).
+  return { markup, bodyId, rest: { x: -distance, y: 0 } };
 }

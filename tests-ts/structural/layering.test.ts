@@ -104,7 +104,8 @@ describe('complete scene integrity', () => {
     expect(document.querySelectorAll('[data-role="star"]').length).toBeGreaterThan(0);
     expect(document.querySelectorAll('[data-role="asteroid"]').length).toBeGreaterThan(0);
     expect(document.querySelectorAll('[data-role="orbit"]')).toHaveLength(2);
-    expect(document.querySelectorAll('[data-role="planet"]')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-role="planet"].ss-animated')).toHaveLength(2);
+    expect(document.querySelectorAll('[data-role="planet"].ss-static')).toHaveLength(2);
     expect(document.querySelectorAll('[data-role="comet"]').length).toBeGreaterThan(0);
   });
 

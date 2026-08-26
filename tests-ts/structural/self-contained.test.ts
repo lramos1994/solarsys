@@ -176,12 +176,27 @@ describe('animation is declarative and SVG-native', () => {
 
   it('depends on no class defined outside the document', () => {
     const document = parse(SCENE);
-    const styled = [...document.querySelectorAll('[class]')];
+    const css = [...document.querySelectorAll('style')]
+      .map((element) => element.textContent ?? '')
+      .join('');
 
-    // The root carries a cosmetic class; nothing may DEPEND on external CSS,
-    // so no internal <style> rule may be missing for a class that is used.
-    for (const element of styled) {
-      expect(element.tagName.toLowerCase()).toBe('svg');
+    // Every class used in the markup must be defined by an internal rule, or
+    // be purely cosmetic on the root. Anything else would depend on the host
+    // page's stylesheet, which D-16 forbids.
+    const used = new Set<string>();
+
+    for (const element of document.querySelectorAll('[class]')) {
+      for (const name of (element.getAttribute('class') ?? '').split(/\s+/)) {
+        if (name !== '' && element.tagName.toLowerCase() !== 'svg') {
+          used.add(name);
+        }
+      }
+    }
+
+    expect(used.size).toBeGreaterThan(0);
+
+    for (const name of used) {
+      expect(css, `class ${name} has no internal rule`).toContain(`.${name}`);
     }
   });
 });

@@ -77,11 +77,36 @@ interface PlanetRenderResult {
 }
 
 /**
+ * Reduced-motion style rule (QLT-005).
+ *
+ * Measured before implementing: CSS cannot stop a running SMIL animation.
+ * `display:none` on `<animateMotion>` (E-054), `animation-play-state`, and a
+ * transform override on the animated group all left the element moving. The
+ * only technique that suppressed motion was hiding the animated SUBTREE.
+ *
+ * So each moving element ships twice — an animated variant and a static twin
+ * resting at its t=0 position — and this one query swaps them. Elements stay
+ * visible and on their orbits, which QLT-005 requires.
+ */
+const REDUCED_MOTION_STYLE =
+  `<style>` +
+  `.ss-static{display:none}` +
+  `@media (prefers-reduced-motion: reduce){` +
+  `.ss-animated{display:none}` +
+  `.ss-static{display:inline}` +
+  `}` +
+  `</style>`;
+
+/**
  * Render one planet: its orbit path, and the animated group carrying the
- * planet body, its ring pieces and its moon.
+ * planet body, its ring pieces and its moon, plus a static twin for
+ * reduced-motion environments.
  *
  * The moon is nested INSIDE the animated group, so it inherits the planet's
  * travel along the orbit while orbiting the planet itself (GEN-008).
+ *
+ * The twin references the body through `<use>` rather than duplicating the
+ * markup, so honouring the preference does not double the file size.
  */
 function renderPlanet(
   params: PlanetParams,
@@ -108,21 +133,51 @@ function renderPlanet(
 
   const moon =
     params.moon === false
-      ? ''
+      ? null
       : renderMoon({ moon: params.moon, index, palette, ids, random, debug });
 
   const duration = randomInt(random, 20, 60);
   const offset = round((duration * randomInt(random, 0, 100)) / 100);
 
+  const bodyId = ids.next('planet-body-group');
+  const restX = canvas.width / 2 - leftExtentOf(params.distance);
+  const restY = canvas.height / 2;
+
+  // The twin must contain NO animation. Referencing the animated subtree with
+  // <use> is not enough: a cloned SMIL animation keeps running in the shadow
+  // tree, so a twin built that way still moves its moon. The twin therefore
+  // references the animation-free body group and places a second <use> of the
+  // moon's body group at the moon's t=0 rest offset.
+  const staticMoon =
+    moon === null
+      ? ''
+      : `<g transform="translate(${moon.rest.x} ${moon.rest.y})">` +
+        `<use href="#${moon.bodyId}"/>` +
+        `</g>`;
+
   const planet =
-    `<g data-role="planet">` +
-    `<g>${body}${moon}</g>` +
+    `<g data-role="planet" class="ss-animated">` +
+    `<g id="${bodyId}">${body}</g>` +
+    (moon === null ? '' : moon.markup) +
     `<animateMotion dur="${duration}s" begin="-${offset}s" repeatCount="indefinite">` +
     `<mpath xlink:href="#${orbitId}"/>` +
     `</animateMotion>` +
+    `</g>` +
+    // The twin rests where the animated body sits at t=0: the orbit start.
+    `<g data-role="planet" class="ss-static" transform="translate(${restX} ${restY})">` +
+    `<use href="#${bodyId}"/>` +
+    staticMoon +
     `</g>`;
 
   return { orbit, planet };
+}
+
+/**
+ * Left extent of a distance. `orbitPath` starts its path at `(cx - left, cy)`,
+ * so this is the x-offset of a planet's t=0 rest position.
+ */
+function leftExtentOf(distance: OrbitDistance): number {
+  return typeof distance === 'number' ? distance : distance[0];
 }
 
 /**
@@ -173,7 +228,13 @@ export function generateScene(
   // Document order IS depth in SVG: background, belt, orbits, sun, planets,
   // comets (GEN-004).
   const content =
-    background + belt + orbits.join('') + sun + planets.join('') + comets;
+    REDUCED_MOTION_STYLE +
+    background +
+    belt +
+    orbits.join('') +
+    sun +
+    planets.join('') +
+    comets;
 
   return documentShell(params.canvas, content);
 }
