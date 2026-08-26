@@ -15,14 +15,23 @@ const CONTENT_OFFSET = CANVAS_MARGIN / 2;
  * The root deliberately carries no `width` or `height`, so the scene scales to
  * its container in both preview and download (D-05, EXP-005). No scripting is
  * ever emitted: the exported file must animate standalone (D-16, QLT-006).
+ *
+ * `metadata` (a `<title>`/`<desc>` pair) is placed directly on the root rather
+ * than inside the translated content group, so assistive technology reads the
+ * scene summary before any geometry (QLT-004).
  */
-export function documentShell(canvas: Canvas, content: string): string {
+export function documentShell(
+  canvas: Canvas,
+  content: string,
+  metadata = '',
+): string {
   const viewBoxWidth = canvas.width + CANVAS_MARGIN;
   const viewBoxHeight = canvas.height + CANVAS_MARGIN;
 
   return (
     `<svg class="solarsys" viewBox="0 0 ${viewBoxWidth} ${viewBoxHeight}"` +
     ` xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">` +
+    metadata +
     `<g transform="translate(${CONTENT_OFFSET} ${CONTENT_OFFSET})">${content}</g>` +
     `</svg>`
   );

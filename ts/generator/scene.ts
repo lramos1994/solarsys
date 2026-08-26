@@ -3,6 +3,7 @@ import { renderSun } from './bodies';
 import { rgba } from './color';
 import { documentShell } from './document';
 import { createIdGenerator, type IdGenerator } from './ids';
+import { escapeText, sceneDescription, sceneTitle } from './metadata';
 import { renderMoon, type MoonConfig } from './moon';
 import { orbitPath, type Canvas, type OrbitDistance } from './orbit';
 import {
@@ -225,6 +226,18 @@ export function generateScene(
   const sun = renderSun(params.canvas, palette, ids);
   const comets = debug ? '' : renderComets(params.canvas, palette, ids, random);
 
+  // Title and description come first so assistive technology encounters the
+  // scene's summary before its geometry (QLT-004).
+  const summary = {
+    canvas: params.canvas,
+    palette,
+    planetCount: params.planets.length,
+    moonCount: params.planets.filter((planet) => planet.moon !== false).length,
+  };
+  const metadata =
+    `<title>${escapeText(sceneTitle(summary))}</title>` +
+    `<desc>${escapeText(sceneDescription(summary))}</desc>`;
+
   // Document order IS depth in SVG: background, belt, orbits, sun, planets,
   // comets (GEN-004).
   const content =
@@ -236,5 +249,5 @@ export function generateScene(
     planets.join('') +
     comets;
 
-  return documentShell(params.canvas, content);
+  return documentShell(params.canvas, content, metadata);
 }
