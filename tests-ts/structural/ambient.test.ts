@@ -38,12 +38,13 @@ function background(width = 300, height = 300, seed = 42): string {
   );
 }
 
-function belt(seed = 42): string {
+function belt(seed = 42, config?: unknown): string {
   return renderAsteroidBelt(
     { width: 300, height: 300 },
     PALETTE,
     createIdGenerator(seed),
     createPrng(seed),
+    config as never,
   );
 }
 
@@ -114,6 +115,30 @@ describe('background and starfield', () => {
 });
 
 describe('asteroid belt', () => {
+  it('honours authored count, size band, radial band, and period', () => {
+    const markup = belt(42, {
+      count: 12,
+      innerRadiusPercent: 40,
+      outerRadiusPercent: 60,
+      size: 4,
+      period: 77,
+    });
+    const document = parse(markup);
+    const asteroids = [...document.querySelectorAll('use[data-role="asteroid"]')];
+    const rotation = document.querySelector('[data-role="asteroid-belt"] animateTransform');
+
+    expect(asteroids).toHaveLength(12);
+    expect(rotation?.getAttribute('dur')).toBe('77s');
+
+    for (const asteroid of asteroids) {
+      const transform = asteroid.getAttribute('transform') ?? '';
+      const scale = Number(/scale\(([^)]+)\)/.exec(transform)?.[1]);
+
+      expect(scale).toBeGreaterThanOrEqual(2.2);
+      expect(scale).toBeLessThanOrEqual(5.2);
+    }
+  });
+
   it('renders asteroid bodies', () => {
     expect(
       parse(belt()).querySelectorAll('use[data-role="asteroid"]').length,

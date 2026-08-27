@@ -9,6 +9,15 @@ export const MIN_RING_TILT = 0.12;
 /** Most open permitted ring, preserved from the baseline `Ring` clamp. */
 export const MAX_RING_TILT = 0.4;
 
+export const RING_TYPES = ['Thin', 'Banded', 'Wide'] as const;
+export type RingType = (typeof RING_TYPES)[number];
+
+export interface RingConfig {
+  type: RingType;
+  sizePercent: number;
+  inclinationDegrees: number;
+}
+
 /** Planets smaller than this never receive a ring (E-010). */
 const MIN_RINGED_SIZE = 6;
 /** Percentage chance that an eligible planet receives a ring (E-010). */
@@ -55,10 +64,12 @@ interface RingGeometry {
   innerWidth: number;
 }
 
-function geometry(r: number, tilt: number): RingGeometry {
+function geometry(r: number, tilt: number, sizePercent = 210): RingGeometry {
+  const outerRadius = r * sizePercent / 100;
+
   return {
-    rx: round(r * 2.1),
-    ry: round(r * 2.1 * tilt),
+    rx: round(outerRadius),
+    ry: round(outerRadius * tilt),
     bandWidth: round(r * 0.5),
     gapWidth: round(r * 0.18),
     innerWidth: round(r * 0.28),
@@ -66,18 +77,34 @@ function geometry(r: number, tilt: number): RingGeometry {
 }
 
 /** Full ring ellipse, painted before the planet body so the body occludes it. */
-function renderRingBack(r: number, tilt: number, palette: Palette): string {
-  const { rx, ry, bandWidth, gapWidth, innerWidth } = geometry(r, tilt);
+function renderRingBack(
+  r: number,
+  tilt: number,
+  palette: Palette,
+  type: RingType = 'Banded',
+  sizePercent = 210,
+): string {
+  const { rx, ry, bandWidth, gapWidth, innerWidth } = geometry(r, tilt, sizePercent);
   const colors = ringColors(palette);
+
+  const bands = type === 'Thin'
+    ? `<ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="none"` +
+      ` stroke="${colors.bands[1]}" stroke-width="${round(bandWidth * 0.45)}" opacity="0.9"/>`
+    : type === 'Wide'
+      ? `<ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="none"` +
+        ` stroke="${colors.bands[1]}" stroke-width="${round(bandWidth * 1.65)}" opacity="0.82"/>` +
+        `<ellipse cx="0" cy="0" rx="${round(rx * 0.7)}" ry="${round(ry * 0.7)}" fill="none"` +
+        ` stroke="${colors.bands[0]}" stroke-width="${round(innerWidth * 1.8)}" opacity="0.95"/>`
+      : `<ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="none"` +
+        ` stroke="${colors.bands[1]}" stroke-width="${bandWidth}" opacity="0.85"/>` +
+        `<ellipse cx="0" cy="0" rx="${round(rx * 0.82)}" ry="${round(ry * 0.82)}" fill="none"` +
+        ` stroke="${colors.gap}" stroke-width="${gapWidth}" opacity="0.6"/>` +
+        `<ellipse cx="0" cy="0" rx="${round(rx * 0.66)}" ry="${round(ry * 0.66)}" fill="none"` +
+        ` stroke="${colors.bands[0]}" stroke-width="${innerWidth}" opacity="0.9"/>`;
 
   return (
     `<g data-role="ring-back" transform="rotate(${RING_ROTATION})">` +
-    `<ellipse cx="0" cy="0" rx="${rx}" ry="${ry}" fill="none"` +
-    ` stroke="${colors.bands[1]}" stroke-width="${bandWidth}" opacity="0.85"/>` +
-    `<ellipse cx="0" cy="0" rx="${round(rx * 0.82)}" ry="${round(ry * 0.82)}" fill="none"` +
-    ` stroke="${colors.gap}" stroke-width="${gapWidth}" opacity="0.6"/>` +
-    `<ellipse cx="0" cy="0" rx="${round(rx * 0.66)}" ry="${round(ry * 0.66)}" fill="none"` +
-    ` stroke="${colors.bands[0]}" stroke-width="${innerWidth}" opacity="0.9"/>` +
+    bands +
     `</g>`
   );
 }
@@ -91,8 +118,10 @@ function renderRingFront(
   tilt: number,
   palette: Palette,
   ids: IdGenerator,
+  type: RingType = 'Banded',
+  sizePercent = 210,
 ): string {
-  const { rx, ry, bandWidth, gapWidth, innerWidth } = geometry(r, tilt);
+  const { rx, ry, bandWidth, gapWidth, innerWidth } = geometry(r, tilt, sizePercent);
   const colors = ringColors(palette);
   const clipId = ids.next('ring-clip');
   const extent = round(r * 4);
@@ -107,23 +136,31 @@ function renderRingFront(
     `<path d="M ${-arcRx} 0 A ${arcRx} ${arcRy} 0 0 0 ${arcRx} 0" fill="none"` +
     ` stroke="${stroke}" stroke-width="${width}" opacity="${opacity}"/>`;
 
+  const arcs = type === 'Thin'
+    ? arc(rx, ry, colors.bands[1], round(bandWidth * 0.45), '1')
+    : type === 'Wide'
+      ? arc(rx, ry, colors.bands[1], round(bandWidth * 1.65), '0.95') +
+        arc(round(rx * 0.7), round(ry * 0.7), colors.bands[0], round(innerWidth * 1.8), '1')
+      : arc(rx, ry, colors.bands[1], bandWidth, '0.95') +
+        arc(round(rx * 0.82), round(ry * 0.82), colors.gap, gapWidth, '0.6') +
+        arc(round(rx * 0.66), round(ry * 0.66), colors.bands[0], innerWidth, '1');
+
   return (
     `<g data-role="ring-front" transform="rotate(${RING_ROTATION})">` +
     `<clipPath id="${clipId}">` +
     `<rect x="${-extent}" y="0" width="${extent * 2}" height="${extent}"/>` +
     `</clipPath>` +
     `<g clip-path="url(#${clipId})">` +
-    arc(rx, ry, colors.bands[1], bandWidth, '0.95') +
-    arc(round(rx * 0.82), round(ry * 0.82), colors.gap, gapWidth, '0.6') +
-    arc(round(rx * 0.66), round(ry * 0.66), colors.bands[0], innerWidth, '1') +
+    arcs +
     `</g>` +
     `</g>`
   );
 }
 
 export interface RingedPlanetOptions extends PlanetBodyOptions {
-  hasRing: boolean;
-  tilt: number;
+  hasRing?: boolean;
+  tilt?: number;
+  ring?: RingConfig | false;
 }
 
 /**
@@ -133,15 +170,36 @@ export interface RingedPlanetOptions extends PlanetBodyOptions {
  * no z-index, so occlusion is purely a document-order property.
  */
 export function renderPlanetWithRing(options: RingedPlanetOptions): string {
-  const { hasRing, tilt, ...body } = options;
+  const { hasRing, tilt, ring, ...body } = options;
+
+  if (ring !== undefined) {
+    if (ring === false) {
+      return renderPlanetBody(body);
+    }
+
+    const authoredTilt = Math.sin(ring.inclinationDegrees * Math.PI / 180);
+
+    return (
+      renderRingBack(body.size, authoredTilt, body.palette, ring.type, ring.sizePercent) +
+      renderPlanetBody(body) +
+      renderRingFront(
+        body.size,
+        authoredTilt,
+        body.palette,
+        body.ids,
+        ring.type,
+        ring.sizePercent,
+      )
+    );
+  }
 
   if (!hasRing) {
     return renderPlanetBody(body);
   }
 
   return (
-    renderRingBack(body.size, tilt, body.palette) +
+    renderRingBack(body.size, tilt ?? MIN_RING_TILT, body.palette) +
     renderPlanetBody(body) +
-    renderRingFront(body.size, tilt, body.palette, body.ids)
+    renderRingFront(body.size, tilt ?? MIN_RING_TILT, body.palette, body.ids)
   );
 }

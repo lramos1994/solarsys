@@ -236,7 +236,7 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
       // visible and identifies the group, and its controls become visible once
       // expanded. Both halves are asserted rather than assuming every group is
       // permanently open.
-      await expect(group.locator('summary')).toBeVisible();
+      await expect(group.locator(':scope > summary')).toBeVisible();
       await expect(group.locator('.summary-title')).toBeVisible();
 
       if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
@@ -440,13 +440,21 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     );
   });
 
-  test('orbital distance stays a free-text input that accepts four values', async ({ page }) => {
-    const distance = page.locator('[data-control="planetDistance"]').first();
+  test('orbital distance offers a scalar range and custom four-value entry', async ({ page }) => {
+    const planet = page.locator('#controls [data-planet]').first();
 
-    await expect(distance).toHaveAttribute('type', 'text');
+    await expect(planet.locator('[data-control="planetDistance"]')).toHaveAttribute(
+      'type',
+      'number',
+    );
 
-    await distance.fill('200,60,200,60');
-    await distance.blur();
+    await planet.locator('[data-orbit-mode="custom"]').check();
+
+    await planet.locator('[data-control="orbitLeft"]').fill('200');
+    await planet.locator('[data-control="orbitTop"]').fill('60');
+    await planet.locator('[data-control="orbitRight"]').fill('200');
+    await planet.locator('[data-control="orbitBottom"]').fill('60');
+    await planet.locator('[data-control="orbitBottom"]').blur();
 
     // A four-value distance is accepted (no error), preserving CTL-002.
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);

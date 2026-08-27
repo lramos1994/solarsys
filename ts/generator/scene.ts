@@ -1,4 +1,9 @@
-import { renderAsteroidBelt, renderBackground, renderComets } from './ambient';
+import {
+  renderAsteroidBelt,
+  renderBackground,
+  renderComets,
+  type AsteroidBeltConfig,
+} from './ambient';
 import { renderSun } from './bodies';
 import { rgba } from './color';
 import { documentShell } from './document';
@@ -13,12 +18,14 @@ import {
   type PaletteName,
 } from './palette';
 import { createPrng, type Prng } from './prng';
-import { renderPlanetWithRing, ringAssignment } from './ring';
+import { renderPlanetWithRing, ringAssignment, type RingConfig } from './ring';
 
 export interface PlanetParams {
   size: number;
   distance: OrbitDistance;
   moon: MoonConfig | false;
+  /** Omitted preserves legacy seed assignment for direct callers. */
+  ring?: RingConfig | false;
 }
 
 export interface SceneParams {
@@ -26,6 +33,8 @@ export interface SceneParams {
   planets: readonly PlanetParams[];
   /** A named palette, or omitted to let the seed choose one. */
   palette?: PaletteName;
+  /** Omitted preserves the legacy fixed belt for direct callers. */
+  asteroidBelt?: AsteroidBeltConfig | false;
 }
 
 export interface SceneOptions {
@@ -59,6 +68,7 @@ function renderOrbit(
   canvas: Canvas,
   distance: OrbitDistance,
   orbitId: string,
+  planetIndex: number,
   debug: boolean,
 ): string {
   // Debug renders the guide geometry boldly; normal mode keeps it a faint hint.
@@ -67,7 +77,8 @@ function renderOrbit(
     : `stroke="${rgba('#ffffff', 0.06)}" stroke-width="0.4"`;
 
   return (
-    `<path data-role="orbit" id="${orbitId}" fill="none" ${stroke}` +
+    `<path data-role="orbit" data-planet-index="${planetIndex}"` +
+    ` id="${orbitId}" fill="none" ${stroke}` +
     ` d="${orbitPath(canvas, distance)}"/>`
   );
 }
@@ -97,18 +108,21 @@ function renderPlanet(
   debug: boolean,
 ): PlanetRenderResult {
   const orbitId = ids.next('orbit');
-  const orbit = renderOrbit(canvas, params.distance, orbitId, debug);
+  const orbit = renderOrbit(canvas, params.distance, orbitId, index, debug);
 
-  const { hasRing, tilt } = ringAssignment(random, params.size);
-  const body = renderPlanetWithRing({
+  const bodyOptions = {
     size: params.size,
     index,
     palette,
     ids,
     random,
-    hasRing,
-    tilt,
-  });
+  };
+  const body = params.ring === undefined
+    ? renderPlanetWithRing({
+        ...bodyOptions,
+        ...ringAssignment(random, params.size),
+      })
+    : renderPlanetWithRing({ ...bodyOptions, ring: params.ring });
 
   const moon =
     params.moon === false
@@ -154,7 +168,9 @@ export function generateScene(
   const background = debug
     ? ''
     : renderBackground(params.canvas, palette, ids, random);
-  const belt = debug ? '' : renderAsteroidBelt(params.canvas, palette, ids, random);
+  const belt = debug || params.asteroidBelt === false
+    ? ''
+    : renderAsteroidBelt(params.canvas, palette, ids, random, params.asteroidBelt);
 
   const orbits: string[] = [];
   const planets: string[] = [];

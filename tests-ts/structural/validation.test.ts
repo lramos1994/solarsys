@@ -55,6 +55,27 @@ const NUMERIC_CASES = [
     build: (value: string) =>
       input({ planets: [{ size: '10', distance: value, moon: false }] }),
   },
+  ...(['orbitLeft', 'orbitTop', 'orbitRight', 'orbitBottom'] as const).map((field) => ({
+    field,
+    bound: BOUNDS[field],
+    build: (value: string) => {
+      const directions = {
+        left: '120',
+        top: '120',
+        right: '120',
+        bottom: '120',
+        [field.replace('orbit', '').toLowerCase()]: value,
+      };
+
+      return input({
+        planets: [{
+          size: '10',
+          distance: { mode: 'custom', ...directions },
+          moon: false,
+        }],
+      });
+    },
+  })),
   {
     field: 'moonSize',
     bound: BOUNDS.moonSize,
@@ -85,6 +106,50 @@ const NUMERIC_CASES = [
         ],
       }),
   },
+  {
+    field: 'ringSize',
+    bound: BOUNDS.ringSize,
+    build: (value: string) => input({
+      planets: [{
+        size: '10',
+        distance: '120',
+        moon: false,
+        ring: { type: 'Banded', sizePercent: value, inclinationDegrees: '16' },
+      }],
+    }),
+  },
+  {
+    field: 'ringInclination',
+    bound: BOUNDS.ringInclination,
+    build: (value: string) => input({
+      planets: [{
+        size: '10',
+        distance: '120',
+        moon: false,
+        ring: { type: 'Banded', sizePercent: '210', inclinationDegrees: value },
+      }],
+    }),
+  },
+  ...([
+    ['asteroidCount', 'count'],
+    ['asteroidInnerRadius', 'innerRadiusPercent'],
+    ['asteroidOuterRadius', 'outerRadiusPercent'],
+    ['asteroidSize', 'size'],
+    ['asteroidPeriod', 'period'],
+  ] as const).map(([field, property]) => ({
+    field,
+    bound: BOUNDS[field],
+    build: (value: string) => input({
+      asteroidBelt: {
+        count: '130',
+        innerRadiusPercent: property === 'outerRadiusPercent' ? '10' : '40',
+        outerRadiusPercent: property === 'innerRadiusPercent' ? '100' : '80',
+        size: '2',
+        period: '163',
+        [property]: value,
+      },
+    }),
+  })),
 ] as const;
 
 describe('parameter bounds (task 1.7 acceptance evidence)', () => {
@@ -93,11 +158,22 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
       [
         'canvasHeight',
         'canvasWidth',
+        'asteroidCount',
+        'asteroidInnerRadius',
+        'asteroidOuterRadius',
+        'asteroidPeriod',
+        'asteroidSize',
         'moonDistance',
         'moonPeriod',
         'moonSize',
+        'orbitBottom',
         'orbitDistance',
+        'orbitLeft',
+        'orbitRight',
+        'orbitTop',
         'planetSize',
+        'ringInclination',
+        'ringSize',
         'seed',
       ].sort(),
     );
@@ -111,6 +187,13 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
     expect(BOUNDS.moonSize).toEqual({ min: 1, max: 40 });
     expect(BOUNDS.moonDistance).toEqual({ min: 0, max: 1_000 });
     expect(BOUNDS.moonPeriod).toEqual({ min: 1, max: 120 });
+    expect(BOUNDS.ringSize).toEqual({ min: 140, max: 300 });
+    expect(BOUNDS.ringInclination).toEqual({ min: 5, max: 60 });
+    expect(BOUNDS.asteroidCount).toEqual({ min: 10, max: 500 });
+    expect(BOUNDS.asteroidInnerRadius).toEqual({ min: 10, max: 99 });
+    expect(BOUNDS.asteroidOuterRadius).toEqual({ min: 11, max: 100 });
+    expect(BOUNDS.asteroidSize).toEqual({ min: 1, max: 10 });
+    expect(BOUNDS.asteroidPeriod).toEqual({ min: 30, max: 600 });
     expect(BOUNDS.seed).toEqual({ min: 0, max: 4_294_967_295 });
   });
 
@@ -306,6 +389,67 @@ describe('rejection semantics', () => {
 
     if (result.ok) {
       expect(result.params.planets[0]?.distance).toEqual([150, 60, 140, 50]);
+    }
+  });
+
+  it('parses an explicit custom orbit into four directional extents', () => {
+    const custom = input({
+      planets: [
+        {
+          size: '10',
+          distance: {
+            mode: 'custom',
+            left: '150',
+            top: '60',
+            right: '140',
+            bottom: '50',
+          },
+          moon: false,
+        },
+      ],
+    } as unknown as Partial<RawSceneInput>);
+
+    expect(() => validateScene(custom)).not.toThrow();
+    const result = validateScene(custom);
+
+    expect(result.ok).toBe(true);
+
+    if (result.ok) {
+      expect(result.params.planets[0]?.distance).toEqual([150, 60, 140, 50]);
+    }
+  });
+
+  it('rejects invalid authored ring and asteroid-belt configuration', () => {
+    const result = validateScene(input({
+      planets: [{
+        size: '10',
+        distance: '120',
+        moon: false,
+        ring: { type: 'Unknown', sizePercent: '301', inclinationDegrees: '4' },
+      }],
+      asteroidBelt: {
+        count: '501',
+        innerRadiusPercent: '80',
+        outerRadiusPercent: '80',
+        size: '11',
+        period: '29',
+      },
+    } as unknown as Partial<RawSceneInput>));
+
+    expect(result.ok).toBe(false);
+
+    if (result.ok === false) {
+      expect(result.errors.map((error) => error.field)).toEqual(
+        expect.arrayContaining([
+          'ringType',
+          'ringSize',
+          'ringInclination',
+          'asteroidCount',
+          'asteroidRadiusRelation',
+          'asteroidSize',
+          'asteroidPeriod',
+        ]),
+      );
     }
   });
 });

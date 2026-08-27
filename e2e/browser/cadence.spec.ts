@@ -84,3 +84,33 @@ test.describe('preview animation cadence (GEN-016)', () => {
     expect(maximumCadence.stars).toBeGreaterThan(defaultCadence.stars);
   });
 });
+
+test.describe('configurable asteroid belt cadence (GEN-018)', () => {
+  test('keeps a maximum configured belt at 1500px animatable', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'chromium', 'Cadence budget is established in Chromium.');
+
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+
+    await setValue(page.locator('[data-control="canvasWidth"]'), '1500');
+    await setValue(page.locator('[data-control="canvasHeight"]'), '1500');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1505 1505/);
+
+    // Open the belt details and set the maximum accepted count, then prove the
+    // configured belt actually rendered before sampling frames (GEN-018).
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+    await setValue(page.locator('[data-control="asteroidCount"]'), '500');
+
+    const asteroids = await page.locator('#preview [data-role="asteroid"]').count();
+
+    expect(asteroids).toBe(500);
+
+    const cadence = await measureCadence(page);
+
+    expect(
+      cadence.fps,
+      `1500px preview with ${asteroids} asteroids rendered ${cadence.nodes} nodes at ${cadence.fps.toFixed(1)}fps`,
+    ).toBeGreaterThanOrEqual(MINIMUM_FPS);
+  });
+});

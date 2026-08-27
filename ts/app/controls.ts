@@ -1,19 +1,20 @@
+import { RING_TYPES, type RingType } from '../generator/ring';
 import { PALETTE_NAMES, paletteByName, type PaletteName } from '../generator/palette';
 import { icon } from './icons';
 import { BOUNDS, type BoundedField } from './validation';
 import {
   RANDOM_PALETTE,
+  type RawAsteroidBeltConfig,
   type RawMoonInput,
+  type RawOrbitInput,
   type RawPlanetInput,
+  type RawRingConfig,
   type RawSceneInput,
 } from './validation';
 
-/** Values the mounted control surface may submit; scene identity is app-owned. */
-export type RawSceneControls = Omit<RawSceneInput, 'seed'>;
-
 /**
  * Control surface markup and reading (CTL-001, CTL-002, CX-001, CX-003,
- * CX-010..CX-012, CD-002..CD-006).
+ * CX-010..CX-014, CD-002..CD-007).
  *
  * Controls are plain form elements carrying `data-control` so tests and the
  * change handler can find them without depending on layout. Values are read
@@ -21,21 +22,40 @@ export type RawSceneControls = Omit<RawSceneInput, 'seed'>;
  * repaired here, because CTL-007 forbids silently repairing user input.
  *
  * Bounded magnitude parameters render as a paired `input[type=range]` plus
- * `input[type=number]` (D-205). The NUMBER input is authoritative: it carries
- * `data-control`, so the validator still receives exactly what the user typed,
- * including an out-of-range value that must be rejected rather than clamped.
+ * `input[type=number]`. The NUMBER input is authoritative: it carries
+ * `data-control`, so the validator still receives exactly what the user typed.
  * The range only offers direct manipulation and writes into its partner.
  *
- * Two bounded parameters are deliberately exempt from direct manipulation:
- * orbital distance, which accepts either a scalar or four comma-separated
- * values (CX-002), and the seed, which is an identity rather than a magnitude —
- * dragging across four billion values communicates nothing.
- *
- * Planet groups are native `<details>` elements (D-203) so disclosure keyboard
- * behaviour and expanded/collapsed state come from the platform. Collapsed
- * groups keep their controls in the DOM, which is why `readControls` still
- * reads them (CD-002).
+ * Orbital distance is scalar by default (one pair) and custom mode renders four
+ * directional pairs (CX-014). Planet groups are native `<details>` elements
+ * (D-203); the Ring group is a nested `<details>` inside each planet and the
+ * Asteroid Belt is a scene-level nested `<details>`.
  */
+
+/** Values the mounted control surface may submit; scene identity is app-owned. */
+export type RawSceneControls = Omit<RawSceneInput, 'seed'>;
+
+export const DEFAULT_MOON: RawMoonInput = {
+  size: '5',
+  distance: '32',
+  period: '15',
+};
+
+/** Ring defaults applied when a user enables a ring on any planet. */
+export const DEFAULT_RING_CONFIG: RawRingConfig = {
+  type: 'Banded',
+  sizePercent: '210',
+  inclinationDegrees: '16',
+};
+
+/** Asteroid belt defaults applied when the belt is enabled. */
+export const DEFAULT_BELT: RawAsteroidBeltConfig = {
+  count: '130',
+  innerRadiusPercent: '81',
+  outerRadiusPercent: '87',
+  size: '2',
+  period: '163',
+};
 
 export const DEFAULT_INPUT: RawSceneInput = {
   canvasWidth: '600',
@@ -43,34 +63,38 @@ export const DEFAULT_INPUT: RawSceneInput = {
   seed: '20260826',
   palette: RANDOM_PALETTE,
   planets: [
-    { size: '12', distance: '110', moon: false },
-    { size: '18', distance: '190', moon: { size: '5', distance: '32', period: '15' } },
-    { size: '9', distance: '260', moon: false },
+    { size: '12', distance: { mode: 'scalar', value: '110' }, moon: false, ring: false },
+    {
+      size: '18',
+      distance: { mode: 'scalar', value: '190' },
+      moon: { size: '5', distance: '32', period: '15' },
+      ring: { type: 'Banded', sizePercent: '210', inclinationDegrees: '16' },
+    },
+    { size: '9', distance: { mode: 'scalar', value: '260' }, moon: false, ring: false },
   ],
+  asteroidBelt: DEFAULT_BELT,
 };
 
 /** Defaults for a newly added planet (CTL-003). */
 export const DEFAULT_PLANET: RawPlanetInput = {
   size: '10',
-  distance: '150',
+  distance: { mode: 'scalar', value: '150' },
   moon: false,
-};
-
-/** Defaults applied when a user enables a moon (CTL-004, D-04). */
-export const DEFAULT_MOON: RawMoonInput = {
-  size: '5',
-  distance: '32',
-  period: '15',
+  ring: false,
 };
 
 /**
- * Presentation-only view state (D-204). It is never part of `RawSceneInput`,
- * never submitted, and never reaches the validator or the generator. It lives
- * in `mountApp` because the form is rebuilt wholesale with `innerHTML`, which
- * would destroy any state held in the DOM.
+ * Presentation-only view state (D-204, CD-007). It is never part of
+ * `RawSceneInput`, never submitted, and never reaches the validator or the
+ * generator. It lives in `mountApp` because the form is rebuilt wholesale with
+ * `innerHTML`, which would destroy any state held in the DOM.
  */
 export interface ControlView {
   collapsed?: ReadonlySet<number>;
+  /** Planet indices whose Ring detail group is expanded. */
+  ringOpen?: ReadonlySet<number>;
+  /** Whether the scene-level Asteroid Belt detail group is expanded. */
+  beltOpen?: boolean;
 }
 
 /** Canvas dimension presets (CX-010). UI-only: they write width and height. */
@@ -90,20 +114,21 @@ const CONTROL_BOUNDS: Record<string, BoundedField> = {
   canvasHeight: 'canvasHeight',
   planetSize: 'planetSize',
   planetDistance: 'orbitDistance',
+  orbitLeft: 'orbitLeft',
+  orbitTop: 'orbitTop',
+  orbitRight: 'orbitRight',
+  orbitBottom: 'orbitBottom',
   moonSize: 'moonSize',
   moonDistance: 'moonDistance',
   moonPeriod: 'moonPeriod',
-  seed: 'seed',
+  ringSize: 'ringSize',
+  ringInclination: 'ringInclination',
+  asteroidCount: 'asteroidCount',
+  asteroidInnerRadius: 'asteroidInnerRadius',
+  asteroidOuterRadius: 'asteroidOuterRadius',
+  asteroidSize: 'asteroidSize',
+  asteroidPeriod: 'asteroidPeriod',
 };
-
-/** Controls that must remain free text (they accept non-single-number forms). */
-const TEXT_CONTROLS = new Set<string>(['planetDistance']);
-
-/**
- * Bounded controls that are NOT offered as a range. `seed` is an identity, not
- * a magnitude; `planetDistance` is already text because of its dual form.
- */
-const NO_RANGE_CONTROLS = new Set<string>(['seed', 'planetDistance']);
 
 /** Which preset, if any, the current dimensions correspond to (CX-010). */
 export function presetFor(width: string, height: string): string {
@@ -122,11 +147,20 @@ function escapeAttribute(value: string): string {
     .replace(/>/g, '&gt;');
 }
 
+/** Compact, comma-free distance text for the collapsed summary. */
+function distanceText(distance: RawPlanetInput['distance']): string {
+  return typeof distance === 'string'
+    ? distance
+    : distance.mode === 'scalar'
+      ? distance.value
+      : [distance.left, distance.top, distance.right, distance.bottom].join(',');
+}
+
 interface FieldOptions {
-  /** Icon rendered beside the label. Decorative; the label carries meaning. */
   glyph?: Parameters<typeof icon>[0];
-  /** Marks the field as part of a compact multi-column sub-group. */
   compact?: boolean;
+  /** Full accessible name; overrides the concise visible label for AT. */
+  ariaLabel?: string;
 }
 
 /**
@@ -144,43 +178,64 @@ function field(
   options: FieldOptions = {},
 ): string {
   const bound = CONTROL_BOUNDS[control];
-  const isBounded = bound !== undefined && !TEXT_CONTROLS.has(control);
-  const wantsRange = isBounded && !NO_RANGE_CONTROLS.has(control);
   const glyph = options.glyph === undefined ? '' : icon(options.glyph);
   const classes = ['field', options.compact === true ? 'field--compact' : '']
     .filter((name) => name !== '')
     .join(' ');
+  const ariaLabel = options.ariaLabel === undefined
+    ? ''
+    : ` aria-label="${escapeAttribute(options.ariaLabel)}"`;
 
   let numeric: string;
   let range = '';
 
-  if (isBounded) {
+  if (bound !== undefined) {
     const { min, max } = BOUNDS[bound];
 
     numeric =
       `<input id="${id}" data-control="${control}" type="number"` +
       ` min="${min}" max="${max}" step="1" value="${escapeAttribute(value)}"` +
-      ` aria-describedby="${id}-error"/>`;
+      `${ariaLabel} aria-describedby="${id}-error"/>`;
 
-    if (wantsRange) {
-      // The range is a second view of the same value. It is labelled by the
-      // same visible label, and it never carries `data-control`: the number
-      // input remains the single value the validator reads (D-205).
-      range =
-        `<input class="field-range" data-range-for="${id}" type="range"` +
-        ` min="${min}" max="${max}" step="1" value="${escapeAttribute(value)}"` +
-        ` aria-labelledby="${id}-label"/>`;
-    }
+    range =
+      `<input class="field-range" data-range-for="${id}" type="range"` +
+      ` min="${min}" max="${max}" step="1" value="${escapeAttribute(value)}"` +
+      ` aria-labelledby="${id}-label"/>`;
   } else {
     numeric =
       `<input id="${id}" data-control="${control}" type="text" inputmode="decimal"` +
-      ` value="${escapeAttribute(value)}" aria-describedby="${id}-error"/>`;
+      ` value="${escapeAttribute(value)}"${ariaLabel} aria-describedby="${id}-error"/>`;
   }
 
   return (
     `<div class="${classes}">` +
     `<label id="${id}-label" for="${id}">${glyph}<span>${label}</span></label>` +
     `<span class="field-value">${range}${numeric}</span>` +
+    `<span id="${id}-error" class="field-error"></span>` +
+    `</div>`
+  );
+}
+
+/** A labelled select field, used for the ring type allow-list. */
+function selectField(
+  id: string,
+  label: string,
+  control: string,
+  value: string,
+  options: readonly string[],
+): string {
+  const optionMarkup = options
+    .map((option) => `<option value="${option}"${option === value ? ' selected' : ''}>${option}</option>`)
+    .join('');
+
+  return (
+    `<div class="field">` +
+    `<label id="${id}-label" for="${id}"><span>${label}</span></label>` +
+    `<span class="field-value">` +
+    `<select id="${id}" data-control="${control}" aria-describedby="${id}-error">` +
+    optionMarkup +
+    `</select>` +
+    `</span>` +
     `<span id="${id}-error" class="field-error"></span>` +
     `</div>`
   );
@@ -193,20 +248,20 @@ function moonGroup(planet: RawPlanetInput, index: number): string {
 
   const controls = enabled
     ? `<div class="moon-controls">` +
-      field(`planet-${index}-moon-size`, 'Moon size', 'moonSize', moon.size, {
+      field(`planet-${index}-moon-size`, 'Size', 'moonSize', moon.size, {
         glyph: 'moon',
         compact: true,
+        ariaLabel: 'Moon size',
       }) +
-      field(
-        `planet-${index}-moon-distance`,
-        'Moon distance',
-        'moonDistance',
-        moon.distance,
-        { glyph: 'distance', compact: true },
-      ) +
-      field(`planet-${index}-moon-period`, 'Moon period', 'moonPeriod', moon.period, {
+      field(`planet-${index}-moon-distance`, 'Distance', 'moonDistance', moon.distance, {
+        glyph: 'distance',
+        compact: true,
+        ariaLabel: 'Moon distance',
+      }) +
+      field(`planet-${index}-moon-period`, 'Period', 'moonPeriod', moon.period, {
         glyph: 'moonPeriod',
         compact: true,
+        ariaLabel: 'Moon period',
       }) +
       `</div>`
     : '';
@@ -223,10 +278,133 @@ function moonGroup(planet: RawPlanetInput, index: number): string {
   );
 }
 
+/** Scalar/custom orbital-distance controls (CX-014, CTL-002). */
+function orbitGroup(planet: RawPlanetInput, index: number): string {
+  const distance = planet.distance;
+  const isCustom = typeof distance === 'object' && distance.mode === 'custom';
+  const scalarValue = typeof distance === 'string'
+    ? distance
+    : distance.mode === 'scalar'
+      ? distance.value
+      : distance.left;
+
+  const modeMarkup =
+    `<div class="orbit-mode" role="radiogroup" aria-label="Orbital distance form">` +
+    `<label><input type="radio" name="planet-${index}-orbit-mode"` +
+    ` data-orbit-mode="scalar"${isCustom ? '' : ' checked'}/><span>Scalar</span></label>` +
+    `<label><input type="radio" name="planet-${index}-orbit-mode"` +
+    ` data-orbit-mode="custom"${isCustom ? ' checked' : ''}/><span>Custom</span></label>` +
+    `</div>`;
+
+  const controls = isCustom
+    ? field(`planet-${index}-orbit-left`, 'Left', 'orbitLeft', distance.left, {
+        glyph: 'distance',
+        ariaLabel: 'Left orbital distance',
+      }) +
+      field(`planet-${index}-orbit-top`, 'Top', 'orbitTop', distance.top, {
+        glyph: 'distance',
+        ariaLabel: 'Top orbital distance',
+      }) +
+      field(`planet-${index}-orbit-right`, 'Right', 'orbitRight', distance.right, {
+        glyph: 'distance',
+        ariaLabel: 'Right orbital distance',
+      }) +
+      field(`planet-${index}-orbit-bottom`, 'Bottom', 'orbitBottom', distance.bottom, {
+        glyph: 'distance',
+        ariaLabel: 'Bottom orbital distance',
+      })
+    : field(`planet-${index}-distance`, 'Orbital distance', 'planetDistance', scalarValue, {
+        glyph: 'distance',
+      });
+
+  return modeMarkup + controls;
+}
+
+/** Per-planet ring toggle plus, when enabled, a nested detail group. */
+function ringGroup(planet: RawPlanetInput, index: number, open: boolean): string {
+  const enabled = planet.ring !== false && planet.ring !== undefined;
+  const ring = enabled && planet.ring !== undefined && planet.ring !== false
+    ? planet.ring
+    : DEFAULT_RING_CONFIG;
+
+  const details = enabled
+    ? `<details class="authored-group"${open ? ' open' : ''}>` +
+      `<summary><span>Ring details</span><span class="authored-summary">${ring.type} · ${ring.sizePercent}%</span></summary>` +
+      `<div class="authored-body">` +
+      selectField(`planet-${index}-ring-type`, 'Ring type', 'ringType', ring.type, [...RING_TYPES]) +
+      field(`planet-${index}-ring-size`, 'Ring size', 'ringSize', ring.sizePercent, {
+        glyph: 'size',
+      }) +
+      field(`planet-${index}-ring-inclination`, 'Ring inclination', 'ringInclination', ring.inclinationDegrees, {
+        glyph: 'size',
+      }) +
+      `</div>` +
+      `</details>`
+    : '';
+
+  return (
+    `<div class="authored-toggle">` +
+    `<div class="switch-field">` +
+    `<input id="planet-${index}-ring" data-control="ringEnabled" type="checkbox"` +
+    ` class="switch-input"${enabled ? ' checked' : ''}/>` +
+    `<label for="planet-${index}-ring"><span>Ring</span></label>` +
+    `</div>` +
+    details +
+    `</div>`
+  );
+}
+
+/** Scene-level asteroid belt toggle plus, when enabled, a nested detail group. */
+function beltGroup(input: RawSceneControls, open: boolean): string {
+  const enabled = input.asteroidBelt !== false && input.asteroidBelt !== undefined;
+  const belt = enabled && input.asteroidBelt !== undefined && input.asteroidBelt !== false
+    ? input.asteroidBelt
+    : DEFAULT_BELT;
+
+  const body = enabled
+    ? `<div class="belt-body"${open ? '' : ' hidden'}>` +
+      field('asteroid-count', 'Asteroid count', 'asteroidCount', belt.count, { glyph: 'size' }) +
+      field('asteroid-inner-radius', 'Inner radius', 'asteroidInnerRadius', belt.innerRadiusPercent, {
+        glyph: 'distance',
+        ariaLabel: 'Asteroid inner radius',
+      }) +
+      field('asteroid-outer-radius', 'Outer radius', 'asteroidOuterRadius', belt.outerRadiusPercent, {
+        glyph: 'distance',
+        ariaLabel: 'Asteroid outer radius',
+      }) +
+      field('asteroid-size', 'Asteroid size', 'asteroidSize', belt.size, {
+        glyph: 'size',
+        ariaLabel: 'Asteroid base size',
+      }) +
+      field('asteroid-period', 'Rotation period', 'asteroidPeriod', belt.period, {
+        glyph: 'moonPeriod',
+        ariaLabel: 'Asteroid rotation period',
+      }) +
+      `</div>`
+    : '';
+
+  const chevron = enabled
+    ? `<button type="button" class="belt-chevron" data-action="toggle-belt-details"` +
+      ` aria-expanded="${open}">${open ? '▾' : '▸'}</button>`
+    : '';
+
+  return (
+    `<div class="belt-group" data-role="asteroid-belt-group">` +
+    `<div class="belt-row">` +
+    `<input id="asteroid-belt-enabled" data-control="beltEnabled" type="checkbox"` +
+    ` class="switch-input"${enabled ? ' checked' : ''}/>` +
+    `<label for="asteroid-belt-enabled"><span>Asteroid belt</span></label>` +
+    `<span class="authored-summary">${enabled ? `${belt.count} rocks` : 'off'}</span>` +
+    chevron +
+    `</div>` +
+    body +
+    `</div>`
+  );
+}
+
 /**
  * Collapsed summary (CD-003). Identity, size, and distance are text, and moon
- * presence is announced through an icon that carries an explicit label —
- * never through colour alone (UI-008).
+ * presence is announced through an icon that carries an explicit label.
  */
 function planetSummary(planet: RawPlanetInput, index: number): string {
   const hasMoon = planet.moon !== false;
@@ -240,7 +418,7 @@ function planetSummary(planet: RawPlanetInput, index: number): string {
     `<span class="summary-title">${icon('planet')}<span>Planet ${index + 1}</span></span>` +
     `<span class="summary-facts">` +
     `<span data-role="summary-size">r${escapeAttribute(planet.size)}</span>` +
-    `<span data-role="summary-distance">d${escapeAttribute(planet.distance)}</span>` +
+    `<span data-role="summary-distance">d${escapeAttribute(distanceText(planet.distance))}</span>` +
     moonBadge +
     `</span>` +
     `</summary>`
@@ -251,6 +429,7 @@ function planetInstrument(
   planet: RawPlanetInput,
   index: number,
   collapsed: ReadonlySet<number>,
+  ringOpen: ReadonlySet<number>,
 ): string {
   const open = collapsed.has(index) ? '' : ' open';
 
@@ -259,14 +438,9 @@ function planetInstrument(
     planetSummary(planet, index) +
     `<div class="planet-body">` +
     field(`planet-${index}-size`, 'Size', 'planetSize', planet.size, { glyph: 'size' }) +
-    field(
-      `planet-${index}-distance`,
-      'Orbital distance',
-      'planetDistance',
-      planet.distance,
-      { glyph: 'distance' },
-    ) +
+    orbitGroup(planet, index) +
     moonGroup(planet, index) +
+    ringGroup(planet, index, ringOpen.has(index)) +
     `<button type="button" data-action="remove-planet" data-index="${index}">` +
     `${icon('remove')}<span>Remove planet ${index + 1}</span></button>` +
     `</div>` +
@@ -300,8 +474,6 @@ function paletteGroup(selected: string): string {
     return option(name, [palette.sun, ...palette.planetHues.slice(0, 3)]);
   }).join('');
 
-  // The seed-chosen option is visually distinguishable from a named palette:
-  // its chips are the neutral chrome tones, and its name states the behaviour.
   const random = option(RANDOM_PALETTE, ['#4a5a68', '#5f7183', '#3b4956', '#2a343e']);
 
   return (
@@ -340,6 +512,7 @@ function canvasPresets(width: string, height: string): string {
 /** Render the full control surface for a given raw input and view state. */
 export function controlsMarkup(input: RawSceneControls, view: ControlView = {}): string {
   const collapsed = view.collapsed ?? new Set<number>();
+  const ringOpen = view.ringOpen ?? new Set<number>();
 
   return (
     `<fieldset data-role="system-instrument">` +
@@ -353,8 +526,9 @@ export function controlsMarkup(input: RawSceneControls, view: ControlView = {}):
     }) +
     `</fieldset>` +
     paletteGroup(input.palette) +
+    beltGroup(input, view.beltOpen ?? false) +
     input.planets
-      .map((planet, index) => planetInstrument(planet, index, collapsed))
+      .map((planet, index) => planetInstrument(planet, index, collapsed, ringOpen))
       .join('') +
     `<button type="button" data-action="add-planet">` +
     `${icon('add')}<span>Add planet</span></button>`
@@ -366,39 +540,69 @@ export function readControls(root: ParentNode): RawSceneControls {
   const value = (selector: string): string =>
     root.querySelector<HTMLInputElement>(selector)?.value ?? '';
 
-  // Collapsed planet groups keep their controls in the DOM, so a collapsed
-  // planet is still read and still submitted (CD-002).
   const planets: RawPlanetInput[] = [
     ...root.querySelectorAll<HTMLElement>('[data-planet]'),
   ].map((group) => {
     const read = (control: string, fallback = ''): string =>
-      group.querySelector<HTMLInputElement>(`[data-control="${control}"]`)?.value ?? fallback;
-    const enabled =
-      group.querySelector<HTMLInputElement>('[data-control="moonEnabled"]')?.checked ??
-      false;
+      group.querySelector<HTMLInputElement | HTMLSelectElement>(`[data-control="${control}"]`)
+        ?.value ?? fallback;
+    const customMode = group.querySelector<HTMLInputElement>('[data-orbit-mode="custom"]')
+      ?.checked ?? false;
+    const distance: RawOrbitInput = customMode
+      ? {
+          mode: 'custom',
+          left: read('orbitLeft'),
+          top: read('orbitTop'),
+          right: read('orbitRight'),
+          bottom: read('orbitBottom'),
+        }
+      : { mode: 'scalar', value: read('planetDistance') };
+
+    const moonEnabled =
+      group.querySelector<HTMLInputElement>('[data-control="moonEnabled"]')?.checked ?? false;
+    const ringEnabled =
+      group.querySelector<HTMLInputElement>('[data-control="ringEnabled"]')?.checked ?? false;
 
     return {
       size: read('planetSize'),
-      distance: read('planetDistance'),
-      moon: enabled
+      distance,
+      moon: moonEnabled
         ? {
             size: read('moonSize', DEFAULT_MOON.size),
             distance: read('moonDistance', DEFAULT_MOON.distance),
             period: read('moonPeriod', DEFAULT_MOON.period),
           }
         : false,
+      ring: ringEnabled
+        ? {
+            type: read('ringType', DEFAULT_RING_CONFIG.type),
+            sizePercent: read('ringSize', DEFAULT_RING_CONFIG.sizePercent),
+            inclinationDegrees: read('ringInclination', DEFAULT_RING_CONFIG.inclinationDegrees),
+          }
+        : false,
     };
   });
 
-  // The palette is a radio group, so the selected value is the checked input
-  // rather than a select's value (D-207).
   const palette =
     root.querySelector<HTMLInputElement>('[data-control="palette"]:checked')?.value ?? '';
+  const beltEnabled =
+    root.querySelector<HTMLInputElement>('[data-control="beltEnabled"]')?.checked ?? false;
+  const readBelt = (control: string, fallback = ''): string =>
+    root.querySelector<HTMLInputElement>(`[data-control="${control}"]`)?.value ?? fallback;
 
   return {
     canvasWidth: value('[data-control="canvasWidth"]'),
     canvasHeight: value('[data-control="canvasHeight"]'),
     palette,
     planets,
+    asteroidBelt: beltEnabled
+      ? {
+          count: readBelt('asteroidCount', DEFAULT_BELT.count),
+          innerRadiusPercent: readBelt('asteroidInnerRadius', DEFAULT_BELT.innerRadiusPercent),
+          outerRadiusPercent: readBelt('asteroidOuterRadius', DEFAULT_BELT.outerRadiusPercent),
+          size: readBelt('asteroidSize', DEFAULT_BELT.size),
+          period: readBelt('asteroidPeriod', DEFAULT_BELT.period),
+        }
+      : false,
   };
 }

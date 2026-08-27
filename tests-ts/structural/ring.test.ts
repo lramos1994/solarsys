@@ -54,6 +54,39 @@ function ordering(markup: string): {
 }
 
 describe('ring occlusion', () => {
+  it('renders an explicit Banded ring from authored size and inclination', () => {
+    const markup = renderPlanetWithRing({
+      size: 10,
+      index: 0,
+      palette: PALETTE,
+      ids: createIdGenerator(42),
+      random: createPrng(42),
+      ring: { type: 'Banded', sizePercent: 250, inclinationDegrees: 30 },
+    } as unknown as Parameters<typeof renderPlanetWithRing>[0]);
+    const document = parseHTML(
+      `<html><body><svg xmlns="http://www.w3.org/2000/svg">${markup}</svg></body></html>`,
+    ).document;
+    const outer = document.querySelector('[data-role="ring-back"] ellipse');
+
+    expect(outer?.getAttribute('rx')).toBe('25');
+    expect(Number(outer?.getAttribute('ry'))).toBeCloseTo(12.5, 2);
+    expect(document.querySelectorAll('[data-role="ring-back"] ellipse')).toHaveLength(3);
+  });
+
+  it('renders structurally distinct authored ring types', () => {
+    const authored = (type: 'Thin' | 'Banded' | 'Wide'): string =>
+      renderPlanetWithRing({
+        size: 10,
+        index: 0,
+        palette: PALETTE,
+        ids: createIdGenerator(42),
+        random: createPrng(42),
+        ring: { type, sizePercent: 210, inclinationDegrees: 16 },
+      } as unknown as Parameters<typeof renderPlanetWithRing>[0]);
+
+    expect(new Set((['Thin', 'Banded', 'Wide'] as const).map(authored)).size).toBe(3);
+  });
+
   it('emits both ring pieces and the planet body', () => {
     const { back, body, front } = ordering(render());
 

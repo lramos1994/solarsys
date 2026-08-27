@@ -167,6 +167,14 @@ export function renderBackground(
 /** Asteroid count, preserved from the baseline. */
 const BELT_COUNT = 130;
 
+export interface AsteroidBeltConfig {
+  count: number;
+  innerRadiusPercent: number;
+  outerRadiusPercent: number;
+  size: number;
+  period: number;
+}
+
 /** Derive the belt's rock tones from the palette (baseline `Theme::asteroid`). */
 function asteroidColors(palette: Palette): { fill: string; stroke: string } {
   const rock = shade(
@@ -186,6 +194,7 @@ export function renderAsteroidBelt(
   palette: Palette,
   ids: IdGenerator,
   random: Prng,
+  config?: AsteroidBeltConfig,
 ): string {
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
@@ -198,13 +207,31 @@ export function renderAsteroidBelt(
 
   let bodies = '';
 
-  for (let index = 0; index < BELT_COUNT; index += 1) {
+  const count = config?.count ?? BELT_COUNT;
+
+  for (let index = 0; index < count; index += 1) {
     const angle =
-      (index / BELT_COUNT) * 2 * Math.PI + randomInt(random, -30, 30) / 100;
-    const jitter = randomInt(random, -90, 90) / 10;
-    const x = round(cx + Math.cos(angle) * (rx + jitter));
-    const y = round(cy + Math.sin(angle) * (ry + jitter));
-    const scale = randomInt(random, 11, 26) / 10;
+      (index / count) * 2 * Math.PI + randomInt(random, -30, 30) / 100;
+    let x: number;
+    let y: number;
+    let scale: number;
+
+    if (config === undefined) {
+      const jitter = randomInt(random, -90, 90) / 10;
+
+      x = round(cx + Math.cos(angle) * (rx + jitter));
+      y = round(cy + Math.sin(angle) * (ry + jitter));
+      scale = randomInt(random, 11, 26) / 10;
+    } else {
+      const radialPercent =
+        config.innerRadiusPercent +
+        (config.outerRadiusPercent - config.innerRadiusPercent) *
+          randomInt(random, 0, 10_000) / 10_000;
+
+      x = round(cx + Math.cos(angle) * cx * radialPercent / 100);
+      y = round(cy + Math.sin(angle) * cy * radialPercent / 100);
+      scale = round(config.size * randomInt(random, 55, 130) / 100);
+    }
     const symbol = randomInt(random, 0, 1) === 1 ? shapeA : shapeB;
     const rotation = randomInt(random, 0, 360);
     const opacity = randomInt(random, 75, 100) / 100;
@@ -215,7 +242,7 @@ export function renderAsteroidBelt(
       ` transform="translate(${x} ${y}) scale(${scale}) rotate(${rotation})"/>`;
   }
 
-  const duration = randomInt(random, 120, 240);
+  const duration = config?.period ?? randomInt(random, 120, 240);
   const beltId = ids.next('belt-group');
 
   return (

@@ -82,6 +82,30 @@ describe('scene composition', () => {
     );
   });
 
+  it('associates every orbit with its zero-based planet index', () => {
+    const indices = [...parse(generateScene(PARAMS, 42)).querySelectorAll('path[data-role="orbit"]')]
+      .map((orbit) => orbit.getAttribute('data-planet-index'));
+
+    expect(indices).toEqual(['0', '1']);
+  });
+
+  it('honours explicit ring and belt presence instead of seed assignment', () => {
+    const authored = {
+      ...PARAMS,
+      planets: PARAMS.planets.map((planet, index) => ({
+        ...planet,
+        ring: index === 0
+          ? { type: 'Banded', sizePercent: 210, inclinationDegrees: 16 }
+          : false,
+      })),
+      asteroidBelt: false,
+    } as unknown as SceneParams;
+    const document = parse(generateScene(authored, 42));
+
+    expect(document.querySelectorAll('[data-role="ring-back"]')).toHaveLength(1);
+    expect(document.querySelector('[data-role="asteroid-belt"]')).toBeNull();
+  });
+
   it('omits moon markup for a planet configured without one', () => {
     const document = parse(
       generateScene(

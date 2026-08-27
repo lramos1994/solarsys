@@ -183,7 +183,9 @@ test.describe('collapsed summary (CD-003)', () => {
   test('the summary identifies the planet, its size, and its distance', async ({
     page,
   }) => {
-    const summary = group(page, 1).locator('summary');
+    // `:scope > summary` targets the planet disclosure only; a ring-bearing
+    // planet also carries a nested Ring detail summary.
+    const summary = group(page, 1).locator(':scope > summary');
 
     await expect(summary).toContainText('Planet 2');
     await expect(summary.locator('[data-role="summary-size"]')).toContainText('18');
@@ -345,11 +347,22 @@ test.describe('paired range and exact entry (CX-001)', () => {
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
   });
 
-  test('the dual-form orbital distance offers no range', async ({ page }) => {
+  test('scalar orbital distance offers one range and custom mode four', async ({ page }) => {
     const target = page.locator('[data-control="planetDistance"]').first();
     const id = await target.getAttribute('id');
 
-    await expect(page.locator(`[data-range-for="${id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-range-for="${id}"]`)).toHaveCount(1);
+
+    const planet = page.locator('#controls [data-planet]').first();
+
+    await planet.locator('[data-orbit-mode="custom"]').check();
+
+    for (const control of ['orbitLeft', 'orbitTop', 'orbitRight', 'orbitBottom'] as const) {
+      const exact = planet.locator(`[data-control="${control}"]`);
+      const directionId = await exact.getAttribute('id');
+
+      await expect(planet.locator(`[data-range-for="${directionId}"]`)).toHaveCount(1);
+    }
   });
 
   test('every moon magnitude has a visible, usable range control', async ({ page }) => {

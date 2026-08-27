@@ -139,6 +139,26 @@ test.describe('planet size', () => {
 });
 
 test.describe('orbital distance forms (CTL-002)', () => {
+  test('defaults to a scalar range and reveals four ranges in custom mode', async ({ page }) => {
+    const planet = page.locator('#controls [data-planet]').first();
+
+    await expect(planet.locator('[data-orbit-mode="scalar"]')).toBeChecked();
+    await expect(planet.locator('[data-range-for="planet-0-distance"]')).toBeVisible();
+
+    await planet.locator('[data-orbit-mode="custom"]').check();
+
+    for (const direction of ['left', 'top', 'right', 'bottom']) {
+      const control = `orbit${direction[0]!.toUpperCase()}${direction.slice(1)}`;
+      const exact = planet.locator(`[data-control="${control}"]`);
+      const id = await exact.getAttribute('id');
+
+      await expect(exact).toBeVisible();
+      expect(id).toBeTruthy();
+      await expect(planet.locator(`[data-range-for="${id}"]`)).toBeVisible();
+      await expect(exact).toHaveValue('110');
+    }
+  });
+
   test('a single value produces a circular orbit', async ({ page }) => {
     await setValue(page.locator('[data-control="planetDistance"]').first(), '100');
 
@@ -158,10 +178,14 @@ test.describe('orbital distance forms (CTL-002)', () => {
   });
 
   test('four values produce independent extents', async ({ page }) => {
-    await setValue(
-      page.locator('[data-control="planetDistance"]').first(),
-      '200,60,200,60',
-    );
+    const planet = page.locator('#controls [data-planet]').first();
+
+    await planet.locator('[data-orbit-mode="custom"]').check();
+
+    await setValue(planet.locator('[data-control="orbitLeft"]'), '200');
+    await setValue(planet.locator('[data-control="orbitTop"]'), '60');
+    await setValue(planet.locator('[data-control="orbitRight"]'), '200');
+    await setValue(planet.locator('[data-control="orbitBottom"]'), '60');
 
     const numbers =
       (await orbitPathData(page, 0)).match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
@@ -176,12 +200,14 @@ test.describe('orbital distance forms (CTL-002)', () => {
   });
 
   test('switching between the two forms updates the same orbit', async ({ page }) => {
-    const control = page.locator('[data-control="planetDistance"]').first();
+    const planet = page.locator('#controls [data-planet]').first();
 
-    await setValue(control, '150');
+    await setValue(planet.locator('[data-control="planetDistance"]'), '150');
     const circular = await orbitPathData(page, 0);
 
-    await setValue(control, '150,40,150,40');
+    await planet.locator('[data-orbit-mode="custom"]').check();
+    await setValue(planet.locator('[data-control="orbitTop"]'), '40');
+    await setValue(planet.locator('[data-control="orbitBottom"]'), '40');
     const asymmetric = await orbitPathData(page, 0);
 
     expect(asymmetric).not.toBe(circular);
@@ -304,6 +330,288 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 });
 
+test.describe('ring configuration (CTL-010)', () => {
+  test('planet 2 opens with a Banded 210% 16° ring; others have none', async ({ page }) => {
+    await expandPlanet(page, 1);
+
+    const planet2 = page.locator('#controls [data-planet]').nth(1);
+
+    await expect(planet2.locator('[data-control="ringEnabled"]')).toBeChecked();
+    await expect(planet2.locator('[data-control="ringType"]')).toHaveValue('Banded');
+    await expect(planet2.locator('[data-control="ringSize"]')).toHaveValue('210');
+    await expect(planet2.locator('[data-control="ringInclination"]')).toHaveValue('16');
+    await expect(page.locator('#preview [data-role="ring-back"]')).toHaveCount(1);
+
+    const planet1 = page.locator('#controls [data-planet]').first();
+
+    await expect(planet1.locator('[data-control="ringEnabled"]')).not.toBeChecked();
+  });
+
+  test('disabling a ring removes its nodes from the preview', async ({ page }) => {
+    await expandPlanet(page, 1);
+
+    await page.locator('#controls [data-planet]').nth(1)
+      .locator('[data-control="ringEnabled"]').uncheck();
+
+    await expect(page.locator('#preview [data-role="ring-back"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="ring-front"]')).toHaveCount(0);
+  });
+
+  test('enabling a ring on a ringless planet applies the defaults', async ({ page }) => {
+    const planet1 = page.locator('#controls [data-planet]').first();
+
+    await planet1.locator('[data-control="ringEnabled"]').check();
+
+    await expect(planet1.locator('[data-control="ringType"]')).toHaveValue('Banded');
+    await expect(planet1.locator('[data-control="ringSize"]')).toHaveValue('210');
+    await expect(page.locator('#preview [data-role="ring-back"]')).toHaveCount(2);
+  });
+
+  test('an invalid ring size is rejected inline and keeps the scene', async ({ page }) => {
+    await expandPlanet(page, 1);
+    const planet2 = page.locator('#controls [data-planet]').nth(1);
+
+    await planet2.locator('.authored-group summary').click();
+    const before = await page.locator('#preview').innerHTML();
+
+    await setValue(planet2.locator('[data-control="ringSize"]'), '999');
+
+    await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
+    expect(await page.locator('#preview').innerHTML()).toBe(before);
+  });
+});
+
+test.describe('asteroid belt configuration (CTL-011)', () => {
+  test('opens enabled with the default configuration', async ({ page }) => {
+    await expect(page.locator('[data-control="beltEnabled"]')).toBeChecked();
+    await expect(page.locator('[data-control="asteroidCount"]')).toHaveValue('130');
+    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(130);
+  });
+
+  test('disabling the belt removes belt output', async ({ page }) => {
+    await page.locator('[data-control="beltEnabled"]').uncheck();
+
+    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveCount(0);
+  });
+
+  test('changing the count regenerates the preview', async ({ page }) => {
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+
+    await setValue(page.locator('[data-control="asteroidCount"]'), '40');
+
+    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(40);
+  });
+
+  test('inner radius not less than outer radius is rejected', async ({ page }) => {
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+    const before = await page.locator('#preview').innerHTML();
+
+    await setValue(page.locator('[data-control="asteroidOuterRadius"]'), '40');
+
+    await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
+    expect(await page.locator('#preview').innerHTML()).toBe(before);
+  });
+});
+
+test.describe('active orbit emphasis (CX-016, UI-009)', () => {
+  const activePath = (page: Page) => page.locator('[data-role="active-orbit-path"]');
+  const orbit = (page: Page, index: number) =>
+    page.locator('#preview [data-role="orbit"]').nth(index);
+
+  test('hovering a planet instrument emphasizes only that orbit', async ({ page }) => {
+    await page.locator('#controls [data-planet]').first().hover();
+
+    const expected = await orbit(page, 0).getAttribute('d');
+
+    await expect(activePath(page)).toHaveAttribute('d', expected ?? '');
+    await expect(page.locator('[data-role="orbit-emphasis"]')).toBeVisible();
+  });
+
+  test('keyboard focus provides equivalent emphasis and wins over hover', async ({ page }) => {
+    await page.locator('#controls [data-planet]').first().hover();
+    await expandPlanet(page, 1);
+    await page.locator('#controls [data-planet]').nth(1)
+      .locator('[data-control="planetSize"]').focus();
+
+    const expected = await orbit(page, 1).getAttribute('d');
+
+    await expect(activePath(page)).toHaveAttribute('d', expected ?? '');
+  });
+
+  test('leaving restores the ordinary preview', async ({ page }) => {
+    const planet1 = page.locator('#controls [data-planet]').first();
+
+    await planet1.hover();
+    await expect(activePath(page)).toHaveAttribute('d', /.+/);
+
+    await page.locator('#preview').hover();
+
+    await expect(page.locator('[data-role="orbit-emphasis"]')).toBeHidden();
+  });
+
+  test('the overlay never enters the downloaded SVG (EXP-002)', async ({ page }) => {
+    await page.locator('#controls [data-planet]').first().hover();
+
+    const download = page.waitForEvent('download');
+    await page.locator('[data-action="download-svg"]').click();
+    const bytes = await downloadedBytes(await download);
+    const text = bytes.toString('utf8');
+
+    expect(text).not.toContain('orbit-emphasis');
+    expect(text).not.toContain('active-orbit-path');
+    expect(text).not.toContain('active-moon-orbit-path');
+    expect(text).not.toContain('active-planet-highlight');
+    expect(text).toContain('<svg');
+  });
+
+  test('the overlay matches the generated scene geometry (UI-009)', async ({ page }) => {
+    await page.locator('#controls [data-planet]').first().hover();
+
+    const boxes = await page.evaluate(() => {
+      const snap = (box: DOMRect) => ({
+        x: Math.round(box.x),
+        y: Math.round(box.y),
+        w: Math.round(box.width),
+        h: Math.round(box.height),
+      });
+
+      return {
+        svg: snap(document.querySelector('#preview svg')!.getBoundingClientRect()),
+        overlay: snap(
+          document.querySelector('[data-role="orbit-emphasis"]')!.getBoundingClientRect(),
+        ),
+        orbit: snap(
+          document.querySelector('#preview [data-role="orbit"][data-planet-index="0"]')!
+            .getBoundingClientRect(),
+        ),
+        path: snap(
+          document.querySelector('[data-role="active-orbit-path"]')!.getBoundingClientRect(),
+        ),
+      };
+    });
+
+    // The overlay is a sibling of #preview and must be sized and positioned to
+    // exactly cover the generated scene (which is CSS-sized, not viewBox-sized,
+    // and centred on desktop), so the copied orbit lands on the generated one.
+    expect(boxes.overlay).toEqual(boxes.svg);
+    expect(boxes.path).toEqual(boxes.orbit);
+  });
+
+  test('the body highlight aligns with the generated body (CX-018, UI-010)', async ({ page }) => {
+    // Freeze the scene so the body position is stable for the geometry compare.
+    await page.locator('[data-action="toggle-playback"]').click();
+    await page.locator('#controls [data-planet]').first().hover();
+
+    const centres = await page.evaluate(() => {
+      const snap = (element: Element | null) => {
+        if (element === null) {
+          return null;
+        }
+
+        const rect = element.getBoundingClientRect();
+
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      };
+
+      return {
+        highlight: snap(document.querySelector('[data-role="active-planet-highlight"]')),
+        body: snap(document.querySelector('#preview [data-role="planet-body"]')),
+      };
+    });
+
+    expect(centres.highlight).not.toBeNull();
+    expect(centres.body).not.toBeNull();
+    expect(Math.abs(centres.highlight!.x - centres.body!.x)).toBeLessThanOrEqual(2);
+    expect(Math.abs(centres.highlight!.y - centres.body!.y)).toBeLessThanOrEqual(2);
+  });
+
+  test('the body highlight tracks the planet as it moves (CX-018)', async ({ page }) => {
+    // Ensure the scene is running so the body actually moves: under reduced
+    // motion the preview starts paused, and a static body cannot demonstrate
+    // tracking. Hover the summary (not editable) afterwards so the implicit
+    // hover pause does not re-freeze the scene.
+    const playbackButton = page.locator('[data-action="toggle-playback"]');
+
+    if ((await playbackButton.getAttribute('aria-pressed')) === 'true') {
+      await playbackButton.click();
+    }
+
+    await page
+      .locator('#controls [data-planet]')
+      .first()
+      .locator('[data-action="toggle-planet"]')
+      .hover();
+
+    const centre = () =>
+      page.evaluate(() => {
+        const rect = document
+          .querySelector('[data-role="active-planet-highlight"]')!
+          .getBoundingClientRect();
+
+        return { x: rect.left + rect.width / 2, y: rect.top + rect.height / 2 };
+      });
+
+    const before = await centre();
+    await page.waitForTimeout(700);
+    const after = await centre();
+
+    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(2);
+  });
+
+  test('a moon-bearing planet shows its moon orbit (CX-018)', async ({ page }) => {
+    await expandPlanet(page, 1);
+    await page.locator('#controls [data-planet]').nth(1).hover();
+
+    const expected = await page.locator('#preview [data-role="moon-orbit"]').first().getAttribute('d');
+
+    await expect(page.locator('[data-role="active-moon-orbit-path"]')).toHaveAttribute(
+      'd',
+      expected ?? '',
+    );
+  });
+
+  test('a moon-less planet shows no moon orbit (CX-018)', async ({ page }) => {
+    await page.locator('#controls [data-planet]').first().hover();
+
+    const hasMoonOrbit = await page
+      .locator('[data-role="active-moon-orbit-path"]')
+      .evaluate((element) => element.hasAttribute('d') && element.getAttribute('d') !== '');
+
+    expect(hasMoonOrbit).toBe(false);
+  });
+
+  test('keyboard focus on an editable control emphasizes body and moon orbit (CX-018)', async ({ page }) => {
+    await expandPlanet(page, 1);
+    await page.locator('#controls [data-planet]').nth(1)
+      .locator('[data-control="planetSize"]').focus();
+
+    const expected = await orbit(page, 1).getAttribute('d');
+
+    await expect(activePath(page)).toHaveAttribute('d', expected ?? '');
+    await expect(page.locator('[data-role="active-planet-highlight"]')).toHaveAttribute('r', /.+/);
+    await expect(page.locator('[data-role="active-moon-orbit-path"]')).toHaveAttribute('d', /.+/);
+  });
+
+  test('toggling an accordion does not lock the emphasis to that planet (CX-018)', async ({ page }) => {
+    const planet0 = page.locator('#controls [data-planet]').first();
+    const planet1 = page.locator('#controls [data-planet]').nth(1);
+
+    // Open planet 1's accordion via its summary; the click leaves keyboard
+    // focus on that summary.
+    await planet1.locator('[data-action="toggle-planet"]').click();
+    await expect(planet1).toHaveAttribute('open', '');
+
+    // Hovering planet 0 must transfer the emphasis to planet 0, not keep it on
+    // the planet whose accordion was just toggled.
+    await planet0.locator('[data-action="toggle-planet"]').hover();
+
+    const expected = await orbit(page, 0).getAttribute('d');
+
+    await expect(activePath(page)).toHaveAttribute('d', expected ?? '');
+  });
+});
+
 test.describe('palette selection (CTL-005, CX-011)', () => {
   test('offers Random plus the six preserved palettes, with Random selected by default', async ({ page }) => {
     const options = page.locator('[data-control="palette"]');
@@ -393,21 +701,20 @@ test.describe('fixed scene seed (CX-013)', () => {
 
 test.describe('generator-owned values (CTL-009)', () => {
   test('does not expose controls for generator-owned randomness', async ({ page }) => {
-    // These values remain seed-derived implementation details. Test both the
-    // machine-readable hook used by the application and the visible labels so
-    // a future control cannot evade the contract merely by choosing a new hook.
+    // Ring and asteroid-belt magnitude parameters are now authored (CTL-009
+    // modified). These remaining values stay seed-derived. Test both the
+    // machine-readable hook and the visible labels so a future control cannot
+    // evade the contract merely by choosing a new hook.
     const forbiddenControls = [
-      'ringPresence',
-      'ringTilt',
       'planetPeriod',
       'starCount',
       'starPosition',
-      'asteroidCount',
-      'asteroidLayout',
-      'asteroidPeriod',
       'cometCount',
       'cometPath',
+      'ringColor',
       'surfaceDetail',
+      'asteroidPosition',
+      'asteroidRotation',
     ];
 
     for (const control of forbiddenControls) {
@@ -417,7 +724,7 @@ test.describe('generator-owned values (CTL-009)', () => {
     const labels = await page.locator('#controls label').allTextContents();
 
     expect(labels.join('\n')).not.toMatch(
-      /ring|orbital period|star (count|position)|asteroid (count|layout|period)|comet (count|path)|surface detail/i,
+      /orbital period|star (count|position)|comet (count|path)|ring colou?r|surface detail/i,
     );
   });
 

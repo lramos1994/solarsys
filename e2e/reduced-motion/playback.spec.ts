@@ -82,6 +82,36 @@ test.describe('playback control', () => {
     expect(await displacement(page), 'the regenerated scene resumed on its own').toBeLessThan(1);
   });
 
+  test('a paused regeneration keeps planets on their orbits', async ({ page }) => {
+    const planet = page.locator('#preview [data-role="planet"]').first();
+    const orbit = page.locator('#preview [data-role="orbit"]').first();
+
+    await page.locator('[data-action="toggle-playback"]').click(); // pause
+
+    const size = page.locator('[data-control="planetSize"]').first();
+    await size.fill('60');
+    await size.blur();
+    await expect(page.locator('#preview [data-role="planet-body"]').first()).toHaveAttribute('r', '60');
+
+    const [planetBox, orbitBox] = await Promise.all([planet.boundingBox(), orbit.boundingBox()]);
+
+    if (planetBox === null || orbitBox === null) {
+      throw new Error('expected planet and orbit geometry to be measurable');
+    }
+
+    // The planet is centred on its orbit path. A paused regeneration must not
+    // collapse it to the base position (the top-left corner) before the SMIL
+    // mpath resolves.
+    const cx = planetBox.x + planetBox.width / 2;
+    const cy = planetBox.y + planetBox.height / 2;
+    const margin = 40;
+
+    expect(cx, 'planet left its orbit horizontally').toBeGreaterThan(orbitBox.x - margin);
+    expect(cx, 'planet left its orbit horizontally').toBeLessThan(orbitBox.x + orbitBox.width + margin);
+    expect(cy, 'planet left its orbit vertically').toBeGreaterThan(orbitBox.y - margin);
+    expect(cy, 'planet left its orbit vertically').toBeLessThan(orbitBox.y + orbitBox.height + margin);
+  });
+
   test('shows no reduced-motion notice when the preference is absent', async ({ page }) => {
     await expect(page.locator('[data-role="reduced-motion-notice"]')).toBeHidden();
   });
@@ -122,5 +152,58 @@ test.describe('reduced motion starts the scene paused', () => {
 
     await expect(notice).toBeHidden();
     expect(await displacement(page), 'play did not start the animation').toBeGreaterThan(1);
+  });
+});
+
+test.describe('hovering an editable control pauses the preview (QLT-010)', () => {
+  test.use({ contextOptions: { reducedMotion: 'no-preference' } });
+
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('hovering a control stops motion without changing the button', async ({ page }) => {
+    const button = page.locator('[data-action="toggle-playback"]');
+
+    await expect(button).toHaveText('Pause animation');
+    await page.locator('[data-control="canvasWidth"]').hover();
+
+    expect(await displacement(page), 'motion did not pause on hover').toBeLessThan(1);
+    await expect(button).toHaveText('Pause animation');
+  });
+
+  test('leaving the control restores motion', async ({ page }) => {
+    await page.locator('[data-control="canvasWidth"]').hover();
+    await page.locator('#preview').hover();
+
+    expect(await displacement(page), 'motion did not resume').toBeGreaterThan(1);
+  });
+
+  test('a user-paused scene stays paused through hover and leave', async ({ page }) => {
+    const button = page.locator('[data-action="toggle-playback"]');
+
+    await button.click();
+    await expect(button).toHaveText('Play animation');
+
+    await page.locator('[data-control="canvasWidth"]').hover();
+    await page.locator('#preview').hover();
+
+    expect(await displacement(page)).toBeLessThan(1);
+    await expect(button).toHaveText('Play animation');
+  });
+
+  test('a hover-paused scene does not resume when a parameter changes', async ({ page }) => {
+    await page.locator('[data-control="canvasWidth"]').hover();
+
+    const width = page.locator('[data-control="canvasWidth"]');
+    await width.fill('640');
+    await width.blur();
+
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
+    expect(
+      await displacement(page),
+      'regenerated scene resumed under the hovering pointer',
+    ).toBeLessThan(1);
   });
 });
