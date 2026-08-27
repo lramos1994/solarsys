@@ -1,4 +1,5 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Download, type Locator, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
 
 /**
  * Task 3.6 (CTL-001, CTL-002): parameter controls drive the preview.
@@ -22,6 +23,15 @@ async function orbitPathData(page: Page, index: number): Promise<string> {
 async function setValue(control: Locator, value: string): Promise<void> {
   await control.fill(value);
   await control.blur();
+}
+
+/** Read the bytes Playwright received for a browser download. */
+async function downloadedBytes(download: Download): Promise<Buffer> {
+  const path = await download.path();
+
+  expect(path).not.toBeNull();
+
+  return readFile(path!);
 }
 
 test.beforeEach(async ({ page }) => {
@@ -336,6 +346,81 @@ test.describe('seed control (CTL-006)', () => {
 
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
     await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
+  });
+});
+
+test.describe('generator-owned values (CTL-009)', () => {
+  test('does not expose controls for generator-owned randomness', async ({ page }) => {
+    // These values remain seed-derived implementation details. Test both the
+    // machine-readable hook used by the application and the visible labels so
+    // a future control cannot evade the contract merely by choosing a new hook.
+    const forbiddenControls = [
+      'ringPresence',
+      'ringTilt',
+      'planetPeriod',
+      'starCount',
+      'starPosition',
+      'asteroidCount',
+      'asteroidLayout',
+      'asteroidPeriod',
+      'cometCount',
+      'cometPath',
+      'surfaceDetail',
+    ];
+
+    for (const control of forbiddenControls) {
+      await expect(page.locator(`[data-control="${control}"]`)).toHaveCount(0);
+    }
+
+    const labels = await page.locator('#controls label').allTextContents();
+
+    expect(labels.join('\n')).not.toMatch(
+      /ring|orbital period|star (count|position)|asteroid (count|layout|period)|comet (count|path)|surface detail/i,
+    );
+  });
+});
+
+test.describe('SVG download (EXP-001, EXP-002)', () => {
+  test('downloads the currently previewed scene repeatedly as SVG', async ({ page }) => {
+    const preview = page.locator('#preview');
+    const downloadButton = page.locator('[data-action="download-svg"]');
+
+    await expect(downloadButton).toBeVisible();
+
+    const firstDownload = page.waitForEvent('download');
+    await downloadButton.click();
+    const first = await firstDownload;
+
+    const secondDownload = page.waitForEvent('download');
+    await downloadButton.click();
+    const second = await secondDownload;
+
+    expect(first.suggestedFilename()).toBe('solarsys-20260826.svg');
+    expect(second.suggestedFilename()).toBe('solarsys-20260826.svg');
+    const [firstBytes, secondBytes] = await Promise.all([
+      downloadedBytes(first),
+      downloadedBytes(second),
+    ]);
+
+    expect(firstBytes).toEqual(secondBytes);
+    expect(firstBytes.toString('utf8')).toContain('<svg');
+    await expect(preview.locator('svg')).toBeVisible();
+  });
+});
+
+test.describe('static client-side operation (QLT-008)', () => {
+  test('generates, previews, and downloads without generation or export requests', async ({ page }) => {
+    const requests: string[] = [];
+    page.on('request', (request) => requests.push(request.url()));
+
+    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
+
+    const download = page.waitForEvent('download');
+    await page.locator('[data-action="download-svg"]').click();
+    await expect((await download).failure()).resolves.toBeNull();
+
+    expect(requests).toEqual([]);
   });
 });
 
