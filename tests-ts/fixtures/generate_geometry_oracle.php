@@ -4,6 +4,18 @@
  * legacy PHP renderer. The fixture stores `Planet::getOrbit()`'s real `d`
  * attribute, not a reimplementation of its geometry.
  *
+ * The PHP implementation this script drives no longer lives on the main line
+ * (D-15): it was retired in task 4.5 and is preserved on the `legacy/php-generator`
+ * branch. Regenerating the oracle therefore means running this script from a
+ * worktree of that branch, for example:
+ *
+ *   git worktree add /tmp/solarsys-legacy legacy/php-generator
+ *   composer install --working-dir=/tmp/solarsys-legacy
+ *   php tests-ts/fixtures/generate_geometry_oracle.php <output-path>
+ *
+ * The committed `geometry-oracle.json` is what the parity suite reads (D-22),
+ * so the tests remain meaningful without PHP present.
+ *
  * Usage: php tests-ts/fixtures/generate_geometry_oracle.php [output-path]
  */
 

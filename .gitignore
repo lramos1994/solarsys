@@ -1,6 +1,7 @@
 node_modules/
-vendor/
-dist/
 build/
 e2e/.artifacts/
-solarsystem.svg
+
+# Orphaned root-owned leftover from the retired PHP/Docker stack (task 4.5).
+# Remove with `sudo rm -rf vendor`, then drop this entry.
+vendor/
