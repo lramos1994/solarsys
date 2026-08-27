@@ -43,4 +43,22 @@ describe('SVG download', () => {
     expect(createSvgDownload('<svg/>', 42).filename).toBe('solarsys-42.svg');
     expect(createSvgDownload('<svg/>', 43).filename).toBe('solarsys-43.svg');
   });
+
+  it('carries the preview\'s title and description into the downloaded file', async () => {
+    const store = createSceneStore();
+    store.submit(VALID);
+    const previewedSvg = store.getState().svg!;
+
+    const title = previewedSvg.match(/<title>([^<]*)<\/title>/)?.[1];
+    const description = previewedSvg.match(/<desc>([^<]*)<\/desc>/)?.[1];
+
+    // Control: mapping this scenario onto an empty match would assert nothing.
+    expect(title).toBeTruthy();
+    expect(description).toBeTruthy();
+
+    const downloaded = await createSvgDownload(previewedSvg, 42).blob.text();
+
+    expect(downloaded).toContain(`<title>${title}</title>`);
+    expect(downloaded).toContain(`<desc>${description}</desc>`);
+  });
 });

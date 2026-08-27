@@ -378,6 +378,43 @@ test.describe('generator-owned values (CTL-009)', () => {
       /ring|orbital period|star (count|position)|asteroid (count|layout|period)|comet (count|path)|surface detail/i,
     );
   });
+
+  test('re-derives generator-owned values from a new seed', async ({ page }) => {
+    // Generator-owned values have no control, so the seed is the ONLY way a
+    // user can influence them. Read them from the rendered scene rather than
+    // comparing whole markup, which would also change with user parameters.
+    const ambientFingerprint = async (): Promise<string> =>
+      page.locator('#preview').evaluate((node) => {
+        const roles = ['star', 'asteroid', 'comet', 'ring'];
+        return roles
+          .map((role) => {
+            const elements = [...node.querySelectorAll(`[data-role^="${role}"]`)];
+            return `${role}:${elements.length}:${elements
+              .slice(0, 5)
+              .map((element) => element.getAttribute('transform') ?? element.getAttribute('d') ?? '')
+              .join(',')}`;
+          })
+          .join('|');
+      });
+
+    const before = await ambientFingerprint();
+
+    // Control: the fingerprint must actually observe something.
+    expect(before).not.toBe('star:0:|asteroid:0:|comet:0:|ring:0:');
+
+    const width = page.locator('[data-control="canvasWidth"]');
+    const planetSize = page.locator('[data-control="planetSize"]').first();
+    const widthBefore = await width.inputValue();
+    const sizeBefore = await planetSize.inputValue();
+
+    await page.locator('[data-action="new-seed"]').click();
+
+    // User-owned parameters are untouched, so any difference below is the
+    // generator re-deriving its own values from the new seed.
+    await expect(width).toHaveValue(widthBefore);
+    await expect(planetSize).toHaveValue(sizeBefore);
+    expect(await ambientFingerprint()).not.toBe(before);
+  });
 });
 
 test.describe('SVG download (EXP-001, EXP-002)', () => {
