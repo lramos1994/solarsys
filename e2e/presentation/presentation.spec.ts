@@ -1,0 +1,483 @@
+import { expect, test, type Page } from '@playwright/test';
+
+/**
+ * Presentation layer (UI-001..007, CX-001..009).
+ *
+ * Drives the application chrome: dark theme, design tokens, focus, responsive
+ * two-pane layout, numeric widgets, planet cards, inline error association,
+ * and focus management. Runs on chromium plus the mobile projects so both the
+ * wide and the narrow layouts are exercised on real engines.
+ *
+ * The generated scene's own behavior is NOT this suite's subject; the
+ * interaction, browser, and reduced-motion suites own that.
+ */
+
+const WIDE = { width: 1200, height: 800 };
+const NARROW = { width: 400, height: 800 };
+
+/** Parse an `rgb()`/`rgba()` string into channels. */
+function rgbChannels(color: string): [number, number, number] {
+  const match = color.match(/rgba?\((\d+),\s*(\d+),\s*(\d+)/);
+
+  if (match === null) {
+    throw new Error(`cannot parse color: ${color}`);
+  }
+
+  return [Number(match[1]), Number(match[2]), Number(match[3])];
+}
+
+function relativeLuminance(color: string): number {
+  const [red, green, blue] = rgbChannels(color);
+  const channelLuminance = (value: number): number => {
+    const channel = value / 255;
+
+    return channel <= 0.03928 ? channel / 12.92 : ((channel + 0.055) / 1.055) ** 2.4;
+  };
+
+  return (
+    0.2126 * channelLuminance(red) +
+    0.7152 * channelLuminance(green) +
+    0.0722 * channelLuminance(blue)
+  );
+}
+
+function contrastRatio(foreground: string, background: string): number {
+  const a = relativeLuminance(foreground);
+  const b = relativeLuminance(background);
+  const [high, low] = a > b ? [a, b] : [b, a];
+
+  return (high + 0.05) / (low + 0.05);
+}
+
+/** Effective text color and the first opaque ancestor background. */
+async function textAndBackground(
+  page: Page,
+  selector: string,
+): Promise<{ text: string; background: string }> {
+  return page.evaluate((sel) => {
+    const element = document.querySelector<HTMLElement>(sel);
+
+    if (element === null) {
+      throw new Error(`missing element: ${sel}`);
+    }
+
+    const text = getComputedStyle(element).color;
+
+    let node: HTMLElement | null = element;
+    let background = '';
+
+    while (node !== null) {
+      const candidate = getComputedStyle(node).backgroundColor;
+
+      if (candidate !== 'transparent' && candidate !== 'rgba(0, 0, 0, 0)') {
+        background = candidate;
+
+        break;
+      }
+
+      node = node.parentElement;
+    }
+
+    return { text, background };
+  }, selector);
+}
+
+/** The element that currently owns keyboard focus, described by its hooks. */
+function focusedHooks(page: Page): Promise<{
+  control: string | null;
+  action: string | null;
+  planet: string | null;
+}> {
+  return page.evaluate(() => {
+    const element = document.activeElement;
+
+    if (element === null) {
+      return { control: null, action: null, planet: null };
+    }
+
+    return {
+      control: element.getAttribute('data-control'),
+      action: element.getAttribute('data-action'),
+      planet: element.closest('[data-planet]')?.getAttribute('data-planet') ?? null,
+    };
+  });
+}
+
+test.describe('theme (UI-001, UI-002)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('declares a dark color scheme and design tokens', async ({ page }) => {
+    const tokens = await page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement);
+
+      return {
+        scheme: style.colorScheme,
+        bg: style.getPropertyValue('--bg').trim(),
+        text: style.getPropertyValue('--text').trim(),
+        accent: style.getPropertyValue('--accent').trim(),
+      };
+    });
+
+    expect(tokens.scheme).toContain('dark');
+    expect(tokens.bg).not.toBe('');
+    expect(tokens.text).not.toBe('');
+    expect(tokens.accent).not.toBe('');
+  });
+
+  test('renders a dark page background rather than browser default', async ({ page }) => {
+    const body = await page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+
+    expect(relativeLuminance(body)).toBeLessThan(0.1);
+  });
+
+  test('styles inputs away from the browser default white field', async ({ page }) => {
+    const input = await page.evaluate(() => {
+      const element = document.querySelector<HTMLInputElement>('[data-control="canvasWidth"]');
+
+      return element === null ? '' : getComputedStyle(element).backgroundColor;
+    });
+
+    expect(input).not.toBe('');
+    expect(relativeLuminance(input)).toBeLessThan(0.3);
+  });
+});
+
+test.describe('layout (UI-004, UI-005)', () => {
+  test.describe('wide viewport', () => {
+    test.use({ viewport: WIDE });
+
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/');
+      await expect(page.locator('#preview svg')).toBeVisible();
+    });
+
+    test('places the controls beside the preview', async ({ page }) => {
+      const controls = await page.locator('.controls-pane').boundingBox();
+      const preview = await page.locator('.preview-pane').boundingBox();
+
+      expect(controls).not.toBeNull();
+      expect(preview).not.toBeNull();
+      expect(controls!.x).toBeLessThan(preview!.x);
+      expect(preview!.width).toBeGreaterThan(controls!.width);
+    });
+  });
+
+  test.describe('narrow viewport', () => {
+    test.use({ viewport: NARROW });
+
+    test.beforeEach(async ({ page }) => {
+      await page.goto('/');
+      await expect(page.locator('#preview svg')).toBeVisible();
+    });
+
+    test('stacks the preview above the controls', async ({ page }) => {
+      const controls = await page.locator('.controls-pane').boundingBox();
+      const preview = await page.locator('.preview-pane').boundingBox();
+
+      expect(controls).not.toBeNull();
+      expect(preview).not.toBeNull();
+      expect(preview!.y).toBeLessThan(controls!.y);
+    });
+
+    test('does not force horizontal scroll', async ({ page }) => {
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+
+      expect(overflow).toBeLessThanOrEqual(1);
+    });
+
+    test('keeps the preview legible and full-width', async ({ page }) => {
+      const preview = await page.locator('.preview-pane').boundingBox();
+
+      expect(preview).not.toBeNull();
+      expect(preview!.width).toBeGreaterThan(320);
+    });
+  });
+
+  test('reflows between the two arrangements on resize', async ({ page }) => {
+    await page.setViewportSize(WIDE);
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+
+    const wideControls = await page.locator('.controls-pane').boundingBox();
+    const widePreview = await page.locator('.preview-pane').boundingBox();
+    expect(wideControls!.x).toBeLessThan(widePreview!.x);
+
+    await page.setViewportSize(NARROW);
+
+    const narrowControls = await page.locator('.controls-pane').boundingBox();
+    const narrowPreview = await page.locator('.preview-pane').boundingBox();
+    expect(narrowPreview!.y).toBeLessThan(narrowControls!.y);
+  });
+});
+
+test.describe('focus (UI-003)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('shows a visible focus indicator on a focused control', async ({ page }) => {
+    const control = page.locator('[data-control="canvasWidth"]');
+
+    await control.focus();
+
+    const outline = await control.evaluate((element) => {
+      const style = getComputedStyle(element);
+
+      return {
+        width: style.outlineWidth,
+        style: style.outlineStyle,
+        color: style.outlineColor,
+      };
+    });
+
+    expect(outline.style).toBe('solid');
+    expect(parseFloat(outline.width)).toBeGreaterThan(0);
+    expect(outline.color).not.toBe('rgb(0, 0, 0)');
+  });
+});
+
+test.describe('numeric widgets (CX-001, CX-002)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('bounded scalar inputs are type=number with native min/max/step', async ({ page }) => {
+    const expected = {
+      canvasWidth: { min: '100', max: '2000' },
+      canvasHeight: { min: '100', max: '2000' },
+      seed: { min: '0', max: '4294967295' },
+    };
+
+    for (const [control, bounds] of Object.entries(expected)) {
+      const input = page.locator(`[data-control="${control}"]`);
+
+      await expect(input).toHaveAttribute('type', 'number');
+      await expect(input).toHaveAttribute('min', bounds.min);
+      await expect(input).toHaveAttribute('max', bounds.max);
+      await expect(input).toHaveAttribute('step', '1');
+    }
+
+    await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
+      'type',
+      'number',
+    );
+    await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
+      'min',
+      '1',
+    );
+    await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
+      'max',
+      '250',
+    );
+  });
+
+  test('orbital distance stays a free-text input that accepts four values', async ({ page }) => {
+    const distance = page.locator('[data-control="planetDistance"]').first();
+
+    await expect(distance).toHaveAttribute('type', 'text');
+
+    await distance.fill('200,60,200,60');
+    await distance.blur();
+
+    // A four-value distance is accepted (no error), preserving CTL-002.
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);
+  });
+
+  test('an out-of-range value is rejected rather than clamped (CX-001)', async ({ page }) => {
+    const control = page.locator('[data-control="canvasWidth"]');
+
+    await control.fill('5');
+    await control.blur();
+
+    const message = await page.locator('[data-role="errors"] li').first().textContent();
+
+    expect(message).toContain('Canvas width');
+    expect(message).toContain('100');
+    expect(message).toContain('2000');
+  });
+});
+
+test.describe('planet cards (CX-003)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('presents each planet as a distinct card with its controls', async ({ page }) => {
+    const cards = page.locator('#controls [data-planet]');
+
+    await expect(cards).toHaveCount(3);
+
+    for (const card of await cards.all()) {
+      await expect(card.locator('[data-control="planetSize"]')).toHaveCount(1);
+      await expect(card.locator('[data-control="planetDistance"]')).toHaveCount(1);
+      await expect(card.locator('[data-action="remove-planet"]')).toHaveCount(1);
+    }
+  });
+});
+
+test.describe('inline errors (CX-004, CX-005)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('associates an inline message with the offending control', async ({ page }) => {
+    const control = page.locator('[data-control="canvasWidth"]');
+
+    await control.fill('5');
+    await control.blur();
+
+    await expect(control).toHaveAttribute('aria-invalid', 'true');
+
+    const describedBy = await control.getAttribute('aria-describedby');
+    expect(describedBy).toBeTruthy();
+
+    const message = await page.locator(`#${describedBy}`).textContent();
+    expect(message).toContain('Canvas width');
+    expect(message).toContain('100');
+  });
+
+  test('reports every invalid field inline at once', async ({ page }) => {
+    await page.locator('[data-control="canvasWidth"]').fill('5');
+    await page.locator('[data-control="canvasWidth"]').blur();
+    await page.locator('[data-control="canvasHeight"]').fill('5');
+    await page.locator('[data-control="canvasHeight"]').blur();
+
+    await expect(page.locator('#controls [aria-invalid="true"]')).toHaveCount(2);
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(2);
+  });
+
+  test('declares the error summary as a live region', async ({ page }) => {
+    await expect(page.locator('[data-role="errors"]')).toHaveAttribute('aria-live', 'polite');
+  });
+
+  test('associates a planet error with the correct card', async ({ page }) => {
+    // Planet 2's size is invalid; the inline message must land inside card 2.
+    const card = page.locator('[data-planet="1"]');
+    const size = card.locator('[data-control="planetSize"]');
+
+    await size.fill('999');
+    await size.blur();
+
+    await expect(size).toHaveAttribute('aria-invalid', 'true');
+
+    const describedBy = await size.getAttribute('aria-describedby');
+    const message = await card.locator(`#${describedBy}`).textContent();
+
+    expect(message).toContain('planet 2');
+  });
+
+  test('clears inline errors once the input is valid again (CX-005)', async ({ page }) => {
+    const control = page.locator('[data-control="canvasWidth"]');
+
+    await control.fill('5');
+    await control.blur();
+    await expect(control).toHaveAttribute('aria-invalid', 'true');
+
+    await control.fill('500');
+    await control.blur();
+
+    await expect(page.locator('#controls [aria-invalid="true"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);
+  });
+});
+
+test.describe('focus management (CX-006, CX-008)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('lands focus on the new card after a keyboard add', async ({ page }) => {
+    await page.locator('[data-action="add-planet"]').focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#controls [data-planet]')).toHaveCount(4);
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('data-control') === 'planetSize',
+    );
+
+    const hooks = await focusedHooks(page);
+
+    expect(hooks.control).toBe('planetSize');
+    expect(hooks.planet).toBe('3');
+  });
+
+  test('moves focus to the next group after a keyboard remove', async ({ page }) => {
+    await page.locator('[data-planet="1"] [data-action="remove-planet"]').focus();
+    await page.keyboard.press('Enter');
+
+    await expect(page.locator('#controls [data-planet]')).toHaveCount(2);
+    await page.waitForFunction(
+      () => document.activeElement?.getAttribute('data-action') === 'remove-planet',
+    );
+
+    const hooks = await focusedHooks(page);
+
+    expect(hooks.action).toBe('remove-planet');
+    expect(hooks.planet).toBe('1');
+  });
+});
+
+test.describe('labels (CX-007)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('labels the playback toggle at first paint', async ({ page }) => {
+    const toggle = page.locator('[data-action="toggle-playback"]');
+
+    await expect(toggle).toHaveText(/Pause animation|Play animation/);
+  });
+
+  test('keeps the label[for=id] contract through the restyle', async ({ page }) => {
+    const controls = page.locator('[data-control]');
+    const total = await controls.count();
+
+    for (let index = 0; index < total; index += 1) {
+      const id = await controls.nth(index).getAttribute('id');
+
+      expect(id, `control ${index} needs an id`).toBeTruthy();
+      await expect(page.locator(`label[for="${id}"]`)).toHaveCount(1);
+    }
+  });
+});
+
+test.describe('contrast (UI-006)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('primary text meets WCAG AA contrast', async ({ page }) => {
+    const cases = [
+      '[data-control="canvasWidth"]', // input text
+      'label[for="canvas-width"]', // label text
+      '[data-action="download-svg"]', // button text
+    ];
+
+    for (const selector of cases) {
+      const { text, background } = await textAndBackground(page, selector);
+
+      expect(
+        contrastRatio(text, background),
+        `${selector} contrast ${contrastRatio(text, background).toFixed(2)}:1 is below 4.5:1`,
+      ).toBeGreaterThanOrEqual(4.5);
+    }
+  });
+
+  test('muted text remains discernible', async ({ page }) => {
+    const { text, background } = await textAndBackground(page, '.seed-line');
+
+    expect(contrastRatio(text, background)).toBeGreaterThanOrEqual(3);
+  });
+});

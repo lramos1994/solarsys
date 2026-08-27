@@ -15,6 +15,7 @@
     "test:browser": "playwright test e2e/browser --project=chromium --project=firefox --project=webkit",
     "test:interaction": "playwright test e2e/interaction --project=chromium",
     "test:reduced-motion": "playwright test e2e/reduced-motion --project=chromium-reduced-motion",
+    "test:presentation": "playwright test e2e/presentation --project=chromium --project=mobile-chrome --project=mobile-safari",
     "test:all": "npm run test && npm run test:browser && npm run test:interaction"
   },
   "repository": {

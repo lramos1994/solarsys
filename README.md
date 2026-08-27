@@ -51,7 +51,8 @@ belt layout and rotation, comet count and paths, and planet surface detail.
 They are derived from the seed, so a new seed changes them.
 
 Invalid input is rejected with a message naming the control and its accepted
-range. Nothing is silently clamped, and the last valid scene stays on screen.
+range. Rejections appear inline at the offending control and in a screen-reader
+summary; nothing is silently clamped, and the last valid scene stays on screen.
 
 ### Determinism and sharing
 
@@ -86,6 +87,7 @@ npm run test:structural    # document structure, integrity, metadata
 npm run test:browser       # Chromium, Firefox, WebKit render + animate
 npm run test:interaction   # control surface, validation, export
 npm run test:reduced-motion
+npm run test:presentation  # chrome: theme, layout, widgets, inline errors, focus
 npm run test:all           # headless + browser + interaction
 npm run typecheck          # tsc, strict
 ```
@@ -99,9 +101,15 @@ the served static output.
 ts/generator/   pure, DOM-free scene generation: params + seed -> SVG string
 ts/app/         the DOM layer: controls, validation, store, preview, download
 tests-ts/       headless suites (geometry parity, determinism, structural)
-e2e/            Playwright suites (browser, interaction, reduced motion)
+e2e/            Playwright suites (browser, interaction, reduced motion, presentation)
 openspec/       the migration's specs, design, traceability, and tasks
 ```
+
+The application chrome (dark minimal theme, responsive two-pane layout, planet
+cards, inline validation errors) lives in `ts/app/styles.css` and the `ts/app/`
+DOM modules, under the `ui-presentation` (UI-*) and `control-ux` (CX-*)
+capabilities. It is presentation-only: it never touches the generator, the
+store's single-serialization rule, or the export contract.
 
 The generator never imports UI code and never touches the DOM, which is what
 makes most of the suite runnable without a browser. All randomness flows through

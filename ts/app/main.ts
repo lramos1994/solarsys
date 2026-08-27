@@ -1,3 +1,4 @@
+import './styles.css';
 import { controlsMarkup, DEFAULT_INPUT, DEFAULT_PLANET, readControls } from './controls';
 import { downloadSvg } from './download';
 import {
@@ -21,6 +22,24 @@ function newSeedExcluding(current: number | null): number {
 }
 
 /**
+ * Maps a validator error field to its `data-control` name (CX-004). Planet
+ * distance errors carry field `orbitDistance` (the bound) or `distanceForm`
+ * (the arity check); both resolve to the single `planetDistance` control.
+ */
+const CONTROL_FOR_FIELD: Record<string, string> = {
+  canvasWidth: 'canvasWidth',
+  canvasHeight: 'canvasHeight',
+  seed: 'seed',
+  palette: 'palette',
+  planetSize: 'planetSize',
+  orbitDistance: 'planetDistance',
+  distanceForm: 'planetDistance',
+  moonSize: 'moonSize',
+  moonDistance: 'moonDistance',
+  moonPeriod: 'moonPeriod',
+};
+
+/**
  * Application shell (CTL-001, CTL-002, CTL-007).
  *
  * The generator stays DOM-free (D-18, D-21); this module owns the DOM. It
@@ -33,16 +52,24 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const store = createSceneStore();
 
   root.innerHTML =
+    `<div class="app-shell">` +
+    `<aside class="controls-pane">` +
     `<form id="controls" novalidate>${controlsMarkup(initial)}</form>` +
-    `<p>Current scene seed: <output data-role="current-seed"></output></p>` +
-    `<ul data-role="errors"></ul>` +
+    `<p class="seed-line">Current scene seed: <output data-role="current-seed"></output></p>` +
+    `<ul data-role="errors" aria-live="polite"></ul>` +
+    `</aside>` +
+    `<section class="preview-pane">` +
     `<div id="preview"></div>` +
-    `<button type="button" data-action="toggle-playback"></button>` +
     `<p data-role="reduced-motion-notice" hidden>` +
     `Your system asks for reduced motion, so the scene starts paused. ` +
     `Downloaded files always animate.` +
     `</p>` +
-    `<button type="button" data-action="download-svg">Download SVG</button>`;
+    `<div class="preview-actions">` +
+    `<button type="button" data-action="toggle-playback">Pause animation</button>` +
+    `<button type="button" data-action="download-svg">Download SVG</button>` +
+    `</div>` +
+    `</section>` +
+    `</div>`;
 
   const form = root.querySelector<HTMLFormElement>('#controls');
   const preview = root.querySelector<HTMLElement>('#preview');
@@ -84,9 +111,49 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       applyPlayback(preview!, playback);
     }
 
+    // Clear previous inline errors and their association (CX-004).
+    for (const element of form!.querySelectorAll('[aria-invalid]')) {
+      element.removeAttribute('aria-invalid');
+    }
+    for (const slot of form!.querySelectorAll('.field-error')) {
+      slot.textContent = '';
+    }
+
+    // Summary list (the aria-live region that announces the rejections).
     errorList!.innerHTML = state.errors
       .map((error) => `<li data-field="${error.field}">${error.message}</li>`)
       .join('');
+
+    // Inline messages, programmatically associated with their control.
+    for (const error of state.errors) {
+      const control = CONTROL_FOR_FIELD[error.field];
+
+      if (control === undefined) {
+        continue;
+      }
+
+      const selector =
+        error.index !== undefined
+          ? `[data-planet="${error.index}"] [data-control="${control}"]`
+          : `[data-control="${control}"]`;
+      const input = form!.querySelector<HTMLInputElement>(selector);
+
+      if (input === null) {
+        continue;
+      }
+
+      input.setAttribute('aria-invalid', 'true');
+
+      const describedBy = input.getAttribute('aria-describedby');
+      const slot = describedBy
+        ? form!.querySelector<HTMLElement>(`#${describedBy}`)
+        : null;
+
+      if (slot !== null) {
+        slot.textContent = error.message;
+      }
+    }
+
     seedDisplay!.value = state.seed === null ? '' : String(state.seed);
     renderPlayback();
   }
@@ -153,6 +220,36 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       planets,
     });
     submit();
+
+    // Focus management (CX-006): the form was just rebuilt, so re-query fresh
+    // nodes in the next frame. On add, land on the new card's first control;
+    // on remove, land on the group that shifted into the removed slot, or the
+    // add button when none remain.
+    const addedIndex = planets.length - 1;
+    const focusSelector =
+      button.dataset.action === 'add-planet'
+        ? `[data-planet="${addedIndex}"] [data-control="planetSize"]`
+        : `[data-planet="${Number(button.dataset.index)}"] [data-action="remove-planet"]`;
+
+    requestAnimationFrame(() => {
+      const target = form!.querySelector<HTMLElement>(focusSelector);
+
+      if (target !== null) {
+        target.focus();
+
+        return;
+      }
+
+      // Removed the last planet (or the trailing slot is now empty): land on
+      // the last remaining group, or the add button when the list is empty.
+      if (button.dataset.action === 'remove-planet' && planets.length > 0) {
+        form!
+          .querySelector<HTMLElement>(`[data-planet="${planets.length - 1}"] [data-action="remove-planet"]`)
+          ?.focus();
+      } else {
+        form!.querySelector<HTMLElement>('[data-action="add-planet"]')?.focus();
+      }
+    });
   });
 
   downloadButton.addEventListener('click', () => {

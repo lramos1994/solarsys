@@ -342,7 +342,7 @@ test.describe('seed control (CTL-006)', () => {
 
   test('retains the displayed seed when a pending seed is invalid', async ({ page }) => {
     await setValue(page.locator('[data-control="seed"]'), '42');
-    await setValue(page.locator('[data-control="seed"]'), 'not-a-seed');
+    await setValue(page.locator('[data-control="seed"]'), '-1');
 
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
     await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
@@ -465,7 +465,7 @@ test.describe('invalid input (CTL-007)', () => {
   test('reports the rejection and keeps the previous scene', async ({ page }) => {
     const before = await page.locator('#preview').innerHTML();
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), 'abc');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '5');
 
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
     expect(await page.locator('#preview').innerHTML()).toBe(before);
@@ -488,7 +488,7 @@ test.describe('invalid input (CTL-007)', () => {
     // Control: a frozen or absent timeline would make the check below vacuous.
     expect(before).toBeGreaterThan(1);
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), 'abc');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '5');
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
 
     // A rewritten preview starts a fresh timeline at zero.
@@ -508,7 +508,7 @@ test.describe('invalid input (CTL-007)', () => {
   test('recovers once the value is valid again', async ({ page }) => {
     const control = page.locator('[data-control="canvasWidth"]');
 
-    await setValue(control, 'abc');
+    await setValue(control, '5');
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
 
     await setValue(control, '500');

@@ -1,4 +1,5 @@
 import { PALETTE_NAMES } from '../generator/palette';
+import { BOUNDS, type BoundedField } from './validation';
 import {
   RANDOM_PALETTE,
   type RawMoonInput,
@@ -7,12 +8,17 @@ import {
 } from './validation';
 
 /**
- * Control surface markup and reading (CTL-001, CTL-002).
+ * Control surface markup and reading (CTL-001, CTL-002, CX-001, CX-003).
  *
  * Controls are plain form elements carrying `data-control` so tests and the
  * change handler can find them without depending on layout. Values are read
  * back as raw strings and handed to the validator: nothing is coerced or
  * repaired here, because CTL-007 forbids silently repairing user input.
+ *
+ * Bounded numeric parameters render as `input[type=number]` with native
+ * `min`/`max`/`step` sourced from the validator's BOUNDS (CX-001, D-31), so the
+ * widget and the validator cannot drift. Orbital distance stays free text
+ * because it accepts either a scalar or four comma-separated values (CX-002).
  */
 
 export const DEFAULT_INPUT: RawSceneInput = {
@@ -41,16 +47,44 @@ export const DEFAULT_MOON: RawMoonInput = {
   period: '15',
 };
 
+/** Maps a `data-control` name to its BOUNDS key, where one exists. */
+const CONTROL_BOUNDS: Record<string, BoundedField> = {
+  canvasWidth: 'canvasWidth',
+  canvasHeight: 'canvasHeight',
+  planetSize: 'planetSize',
+  planetDistance: 'orbitDistance',
+  moonSize: 'moonSize',
+  moonDistance: 'moonDistance',
+  moonPeriod: 'moonPeriod',
+  seed: 'seed',
+};
+
+/** Controls that must remain free text (they accept non-single-number forms). */
+const TEXT_CONTROLS = new Set<string>(['planetDistance']);
+
 function field(
   id: string,
   label: string,
   control: string,
   value: string,
 ): string {
+  const bound = CONTROL_BOUNDS[control];
+
+  let attributes: string;
+
+  if (bound !== undefined && !TEXT_CONTROLS.has(control)) {
+    const { min, max } = BOUNDS[bound];
+    attributes = `type="number" min="${min}" max="${max}" step="1"`;
+  } else {
+    attributes = `type="text" inputmode="decimal"`;
+  }
+
   return (
     `<div class="field">` +
     `<label for="${id}">${label}</label>` +
-    `<input id="${id}" data-control="${control}" type="text" value="${value}"/>` +
+    `<input id="${id}" data-control="${control}" ${attributes} value="${value}"` +
+    ` aria-describedby="${id}-error"/>` +
+    `<span id="${id}-error" class="field-error"></span>` +
     `</div>`
   );
 }
@@ -96,7 +130,9 @@ export function controlsMarkup(input: RawSceneInput): string {
     field('canvas-height', 'Canvas height', 'canvasHeight', input.canvasHeight) +
     `<div class="field">` +
     `<label for="palette">Palette</label>` +
-    `<select id="palette" data-control="palette">${paletteOptions}</select>` +
+    `<select id="palette" data-control="palette" aria-describedby="palette-error">` +
+    `${paletteOptions}</select>` +
+    `<span id="palette-error" class="field-error"></span>` +
     `</div>` +
     field('seed', 'Seed', 'seed', input.seed) +
     `<button type="button" data-action="new-seed">New seed</button>` +

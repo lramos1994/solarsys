@@ -1,0 +1,328 @@
+/*
+ * SolarSys application chrome (UI-001..007, CX-003).
+ *
+ * Dark, minimal, discreet: the generated scene is the focal point, so the
+ * chrome stays quiet. Design tokens live on :root as custom properties
+ * (UI-002, D-29); component styles reference the tokens, never literal hex.
+ *
+ * The generated SVG is intentionally never styled from here — the scene owns
+ * its own appearance (scene-generation).
+ */
+
+/* ---------------------------------------------------------------- tokens */
+
+:root {
+  color-scheme: dark;
+
+  /* palette */
+  --bg: #0b0f14;
+  --surface: #141a22;
+  --surface-raised: #1c2430;
+  --border: #3a4656;
+  --border-strong: #4c5b70;
+  --text: #e9eef5;
+  --text-muted: #a9b4c4;
+  --accent: #5ee6c8;
+  --accent-ink: #07231d;
+  --danger: #ff8a7a;
+  --focus: #5ee6c8;
+
+  /* shape */
+  --radius-sm: 6px;
+  --radius: 10px;
+  --radius-lg: 14px;
+
+  /* spacing */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+
+  /* type */
+  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+    sans-serif;
+  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
+    monospace;
+}
+
+/* ------------------------------------------------------------------ base */
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-ui);
+  font-size: 16px;
+  line-height: 1.5;
+}
+
+body {
+  min-height: 100vh;
+}
+
+/* ----------------------------------------------------------------- layout */
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-5);
+  min-height: 100vh;
+  padding: var(--space-4);
+}
+
+/* On narrow viewports the preview is the focal point and leads the page
+   (UI-004: "preview first"). */
+.controls-pane,
+.preview-pane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  min-width: 0;
+}
+
+.preview-pane {
+  order: -1;
+}
+
+/* Wide viewport: controls beside the preview, controls sticky (UI-004, D-30). */
+@media (min-width: 720px) {
+  .app-shell {
+    grid-template-columns: minmax(280px, 360px) 1fr;
+    padding: var(--space-5);
+  }
+
+  .preview-pane {
+    order: initial;
+  }
+
+  .controls-pane {
+    position: sticky;
+    top: var(--space-5);
+    align-self: start;
+    max-height: calc(100vh - 2 * var(--space-5));
+    overflow-y: auto;
+  }
+}
+
+/* --------------------------------------------------------------- preview */
+
+#preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 0;
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  overflow: hidden;
+}
+
+/* The scene scales to its container; no intrinsic width/height on the SVG
+   (EXP-005, D-05). */
+#preview svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+}
+
+.preview-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+/* ------------------------------------------------------------------- form */
+
+#controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+fieldset {
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  padding: var(--space-4);
+  margin: 0;
+}
+
+legend {
+  padding: 0 var(--space-2);
+  font-weight: 600;
+  font-size: 0.8rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+  margin-bottom: var(--space-3);
+}
+
+.field:last-child {
+  margin-bottom: 0;
+}
+
+.field label {
+  font-size: 0.85rem;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+input[type="text"],
+input[type="number"],
+select {
+  background: var(--surface-raised);
+  color: var(--text);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-3);
+  font-size: 1rem;
+  font-family: var(--font-mono);
+  min-width: 0;
+}
+
+input[type="text"]:hover,
+input[type="number"]:hover,
+select:hover {
+  border-color: var(--accent);
+}
+
+input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 1.1rem;
+  height: 1.1rem;
+}
+
+/* ---------------------------------------------------------------- buttons */
+
+button {
+  font: inherit;
+  cursor: pointer;
+  color: var(--text);
+  background: var(--surface-raised);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: var(--space-2) var(--space-4);
+}
+
+button:hover {
+  border-color: var(--accent);
+}
+
+button[data-action="toggle-playback"] {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: var(--accent-ink);
+  font-weight: 600;
+}
+
+button[data-action="add-planet"],
+button[data-action="download-svg"] {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+button[data-action="new-seed"] {
+  color: var(--accent);
+}
+
+button[data-action="remove-planet"] {
+  color: var(--danger);
+  background: transparent;
+  border-color: transparent;
+  padding-left: 0;
+  padding-right: 0;
+}
+
+button[data-action="remove-planet"]:hover {
+  text-decoration: underline;
+  border-color: transparent;
+}
+
+/* ------------------------------------------------------------ planet card */
+
+fieldset[data-planet] {
+  border-left: 3px solid var(--accent);
+  position: relative;
+}
+
+fieldset[data-planet] legend {
+  color: var(--accent);
+}
+
+/* ------------------------------------------------------------------ seed */
+
+.seed-line {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.seed-line output {
+  font-family: var(--font-mono);
+  color: var(--text);
+}
+
+/* ----------------------------------------------------------------- errors */
+
+ul[data-role="errors"] {
+  margin: 0;
+  padding-left: var(--space-4);
+  color: var(--danger);
+  font-size: 0.85rem;
+}
+
+.field-error {
+  color: var(--danger);
+  font-size: 0.8rem;
+  min-height: 1.2em;
+}
+
+input[aria-invalid="true"] {
+  border-color: var(--danger);
+}
+
+/* ------------------------------------------------------------------ notice */
+
+[data-role="reduced-motion-notice"] {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ------------------------------------------------------------------ focus */
+
+:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+
+/* ------------------------------------------------------- reduced motion */
+
+/* Chrome transitions exist only when the user has not asked for reduced
+   motion (UI-007). Under `prefers-reduced-motion: reduce` no transition rule
+   applies, so computed transition-duration stays 0s. */
+@media (prefers-reduced-motion: no-preference) {
+  button,
+  input[type="text"],
+  input[type="number"],
+  select {
+    transition:
+      background-color 120ms ease,
+      border-color 120ms ease,
+      color 120ms ease;
+  }
+}

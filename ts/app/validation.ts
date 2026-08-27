@@ -60,6 +60,14 @@ export interface RawSceneInput {
 export interface ValidationError {
   field: BoundedField | 'palette' | 'distanceForm';
   message: string;
+  /**
+   * Zero-based planet index, present when the error belongs to a specific
+   * planet's control (size, distance, moon). Absent for scene-level fields
+   * (canvas, seed, palette). Presentation-only metadata used by the DOM layer
+   * to associate an inline message with the right control; it never changes
+   * which submissions are accepted or rejected.
+   */
+  index?: number;
 }
 
 export type ValidationResult =
@@ -212,9 +220,17 @@ export function validateScene(input: RawSceneInput): ValidationResult {
   input.planets.forEach((planet, index) => {
     // Planets are numbered from 1 in messages, matching what the user sees.
     const context = `planet ${index + 1}`;
+    const errorStart = errors.length;
     const size = parseBounded(planet.size, 'planetSize', errors, context);
     const distance = parseDistance(planet.distance, errors, context);
     const moon = parseMoon(planet.moon, errors, context);
+
+    // Tag errors produced by this planet with its zero-based index so the DOM
+    // layer can attach each inline message to the correct control (CX-004).
+    // The index is presentation metadata; it never affects validity.
+    for (let i = errorStart; i < errors.length; i += 1) {
+      errors[i] = { ...errors[i]!, index };
+    }
 
     if (size !== null && distance !== null && moon !== null) {
       planets.push({ size, distance, moon });
