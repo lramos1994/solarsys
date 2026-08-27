@@ -183,6 +183,11 @@ describe('animation is declarative and SVG-native', () => {
     // Every class used in the markup must be defined by an internal rule, or
     // be purely cosmetic on the root. Anything else would depend on the host
     // page's stylesheet, which D-16 forbids.
+    //
+    // Since D-28 the scene carries no internal stylesheet at all, so the
+    // honest form of this check is that no non-root element relies on a class
+    // in the first place. Were one reintroduced, it would need an internal
+    // rule to satisfy the loop below.
     const used = new Set<string>();
 
     for (const element of document.querySelectorAll('[class]')) {
@@ -192,8 +197,6 @@ describe('animation is declarative and SVG-native', () => {
         }
       }
     }
-
-    expect(used.size).toBeGreaterThan(0);
 
     for (const name of used) {
       expect(css, `class ${name} has no internal rule`).toContain(`.${name}`);

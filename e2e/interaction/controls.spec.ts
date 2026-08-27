@@ -216,7 +216,7 @@ test.describe('moon configuration (CTL-004)', () => {
     await expect(planet.locator('[data-control="moonPeriod"]')).toHaveValue('15');
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(2);
     await expect(
-      page.locator('#preview [data-role="planet"].ss-animated').first()
+      page.locator('#preview [data-role="planet"]').first()
         .locator(':scope > [data-role="moon"] > animateMotion'),
     ).toHaveAttribute('dur', '15s');
   });
@@ -240,7 +240,7 @@ test.describe('moon configuration (CTL-004)', () => {
 
   test('applies configured moon size, distance, and period to the preview', async ({ page }) => {
     const planet = page.locator('#controls [data-planet]').nth(1);
-    const renderedPlanet = page.locator('#preview [data-role="planet"].ss-animated').nth(1);
+    const renderedPlanet = page.locator('#preview [data-role="planet"]').nth(1);
 
     await setValue(planet.locator('[data-control="moonSize"]'), '8');
     await setValue(planet.locator('[data-control="moonDistance"]'), '40');

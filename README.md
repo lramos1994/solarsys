@@ -41,6 +41,10 @@ The interface exposes every user-owned parameter:
   Verdant, Mono
 - seed: displayed, editable, and regenerable
 
+A **Pause/Play** control stops and resumes the previewed animation. If your
+system asks for reduced motion, the scene starts paused and explains why; press
+play to start it. Downloaded files always animate regardless.
+
 Values that the generator owns are deliberately not exposed as controls: ring
 presence and tilt, planet orbital periods, star counts and positions, asteroid
 belt layout and rotation, comet count and paths, and planet surface detail.
@@ -63,9 +67,11 @@ consume the identical string.
 
 The downloaded file is self-contained. It animates when opened directly and when
 embedded via `<img src>`, contains no `<script>`, and references no external
-stylesheet, image, or font. It carries `<title>` and `<desc>`, and honours
-`prefers-reduced-motion` by presenting a static scene with every element still
-visible on its orbit.
+stylesheet, image, or font. It carries `<title>` and `<desc>`.
+
+The exported file animates unconditionally and carries no pause control, because
+that would require scripting and the file is deliberately script-free. Reduced
+motion is honoured by the application, not by the artefact.
 
 The root `<svg>` carries a `viewBox` but no intrinsic `width`/`height`, so it
 scales to its container.

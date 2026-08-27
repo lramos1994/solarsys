@@ -173,13 +173,11 @@ export function renderAsteroidBelt(
     `<polygon id="${shapeA}" points="0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8"/>` +
     `<polygon id="${shapeB}" points="0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7"/>` +
     `</defs>` +
-    `<g data-role="asteroid-belt" class="ss-animated">` +
+    `<g data-role="asteroid-belt">` +
     `<animateTransform attributeName="transform" type="rotate"` +
     ` from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="${duration}s" repeatCount="indefinite"/>` +
     `<g id="${beltId}">${bodies}</g>` +
-    `</g>` +
-    // Static twin at the belt's unrotated rest position (QLT-005).
-    `<g data-role="asteroid-belt" class="ss-static"><use href="#${beltId}"/></g>`
+    `</g>`
   );
 }
 
@@ -228,7 +226,7 @@ export function renderComets(
       `<stop offset="100%" stop-color="${rgba(tint(palette.accent, 0.4), 0)}"/>` +
       `</radialGradient>` +
       `</defs>` +
-      `<g data-role="comet" class="ss-animated">` +
+      `<g data-role="comet">` +
       `<g id="${cometId}">` +
       `<path data-role="comet-tail"` +
       ` d="M 0 0 Q ${mid} ${-halfWidth}, ${-length} 0 Q ${mid} ${halfWidth}, 0 0 Z"` +
@@ -240,11 +238,6 @@ export function renderComets(
       `</g>` +
       `<animateMotion dur="${duration}s" begin="${begin}s" repeatCount="indefinite"` +
       ` rotate="auto" path="${path}"/>` +
-      `</g>` +
-      // Static twin resting at the comet's path start (QLT-005).
-      `<g data-role="comet" class="ss-static"` +
-      ` transform="translate(${-COMET_OVERSHOOT} ${startY})">` +
-      `<use href="#${cometId}"/>` +
       `</g>`;
   }
 

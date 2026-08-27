@@ -47,14 +47,6 @@ function moonOrbitPath(distance: number): string {
 export interface MoonRenderResult {
   /** Animated moon markup, emitted inside the planet's animated group. */
   markup: string;
-  /**
-   * Id of the moon's visual group, carrying no animation. The planet's
-   * reduced-motion twin references this so the clone stays genuinely static:
-   * a `<use>` of an animated subtree keeps animating in the shadow tree.
-   */
-  bodyId: string;
-  /** The moon's t=0 rest offset from its parent planet. */
-  rest: { x: number; y: number };
 }
 
 /**
@@ -104,7 +96,5 @@ export function renderMoon(options: MoonOptions): MoonRenderResult {
     `</animateMotion>` +
     `</g>`;
 
-  // keyPoints="1;0" starts the moon at the END of its path, which for this
-  // closed circle is the same point as the start: (-distance, 0).
-  return { markup, bodyId, rest: { x: -distance, y: 0 } };
+  return { markup };
 }

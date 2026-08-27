@@ -59,8 +59,7 @@ describe('debug mode suppresses ambience', () => {
 
   it('still renders the sun and the planets', () => {
     expect(document.querySelector('[data-sun-body]')).not.toBeNull();
-    // Each planet ships as an animated variant plus a reduced-motion twin.
-    expect(document.querySelectorAll('g[data-role="planet"].ss-animated')).toHaveLength(2);
+    expect(document.querySelectorAll('g[data-role="planet"]')).toHaveLength(2);
   });
 });
 

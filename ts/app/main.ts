@@ -1,5 +1,11 @@
 import { controlsMarkup, DEFAULT_INPUT, DEFAULT_PLANET, readControls } from './controls';
 import { downloadSvg } from './download';
+import {
+  applyPlayback,
+  playbackActionLabel,
+  prefersReducedMotion,
+  type PlaybackState,
+} from './playback';
 import { createSceneStore } from './store';
 import type { RawSceneInput } from './validation';
 
@@ -31,6 +37,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `<p>Current scene seed: <output data-role="current-seed"></output></p>` +
     `<ul data-role="errors"></ul>` +
     `<div id="preview"></div>` +
+    `<button type="button" data-action="toggle-playback"></button>` +
+    `<p data-role="reduced-motion-notice" hidden>` +
+    `Your system asks for reduced motion, so the scene starts paused. ` +
+    `Downloaded files always animate.` +
+    `</p>` +
     `<button type="button" data-action="download-svg">Download SVG</button>`;
 
   const form = root.querySelector<HTMLFormElement>('#controls');
@@ -38,12 +49,26 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
   const seedDisplay = root.querySelector<HTMLOutputElement>('[data-role="current-seed"]');
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
+  const playbackButton = root.querySelector<HTMLButtonElement>('[data-action="toggle-playback"]');
+  const notice = root.querySelector<HTMLElement>('[data-role="reduced-motion-notice"]');
 
-  if (!form || !preview || !errorList || !seedDisplay || !downloadButton) {
+  if (!form || !preview || !errorList || !seedDisplay || !downloadButton || !playbackButton || !notice) {
     throw new Error('Application shell failed to mount its own markup.');
   }
 
   let rendered: string | null = null;
+
+  // Reduced motion decides only the STARTING state; the user owns it after
+  // that. The notice explains the pause and retires once it is acted upon.
+  const startsPaused = prefersReducedMotion();
+  let playback: PlaybackState = startsPaused ? 'paused' : 'running';
+  let explained = startsPaused;
+
+  function renderPlayback(): void {
+    playbackButton!.textContent = playbackActionLabel(playback);
+    playbackButton!.setAttribute('aria-pressed', String(playback === 'paused'));
+    notice!.hidden = !explained;
+  }
 
   function render(): void {
     const state = store.getState();
@@ -55,12 +80,15 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     if (state.svg !== null && state.svg !== rendered) {
       preview!.innerHTML = state.svg;
       rendered = state.svg;
+      // A fresh scene always starts running, so re-assert the chosen state.
+      applyPlayback(preview!, playback);
     }
 
     errorList!.innerHTML = state.errors
       .map((error) => `<li data-field="${error.field}">${error.message}</li>`)
       .join('');
     seedDisplay!.value = state.seed === null ? '' : String(state.seed);
+    renderPlayback();
   }
 
   store.subscribe(render);
@@ -133,6 +161,14 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     if (svg !== null && seed !== null) {
       downloadSvg(svg, seed);
     }
+  });
+
+  playbackButton.addEventListener('click', () => {
+    playback = playback === 'running' ? 'paused' : 'running';
+    // Once the user has taken control, the explanation has served its purpose.
+    explained = false;
+    applyPlayback(preview!, playback);
+    renderPlayback();
   });
 
   submit();
