@@ -21,11 +21,11 @@ export interface Bound {
 
 /** Concrete bounds fixed in task 1.7. Both endpoints are accepted. */
 export const BOUNDS = {
-  canvasWidth: { min: 100, max: 2_000 },
-  canvasHeight: { min: 100, max: 2_000 },
-  planetSize: { min: 1, max: 250 },
-  orbitDistance: { min: 0, max: 5_000 },
-  moonSize: { min: 1, max: 100 },
+  canvasWidth: { min: 100, max: 1_500 },
+  canvasHeight: { min: 100, max: 1_500 },
+  planetSize: { min: 1, max: 100 },
+  orbitDistance: { min: 0, max: 1_200 },
+  moonSize: { min: 1, max: 40 },
   moonDistance: { min: 0, max: 1_000 },
   moonPeriod: { min: 1, max: 120 },
   seed: { min: 0, max: 4_294_967_295 },

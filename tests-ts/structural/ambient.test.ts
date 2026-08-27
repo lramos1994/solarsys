@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { createHash } from 'node:crypto';
 import { parseHTML } from 'linkedom';
 import { inspectStructure } from '../helpers/structure';
 import { createIdGenerator } from '../../ts/generator/ids';
@@ -69,6 +70,28 @@ describe('background and starfield', () => {
     const large = parse(background(600, 600)).querySelectorAll('[data-role="star"]').length;
 
     expect(large).toBeGreaterThan(small);
+  });
+
+  it('preserves the default-canvas ambient bytes at the damping knee', () => {
+    const digest = createHash('sha256').update(background(600, 600, 42)).digest('hex');
+
+    expect(digest).toBe('57a65564a6634b87ad510fbcae8d68b6adadbcba1cf6c0591a1a212a4270362a');
+  });
+
+  it('bounds large-canvas star count while keeping it above the default', () => {
+    const defaultCount = parse(background(600, 600, 42)).querySelectorAll('[data-role="star"]').length;
+    const maximumCount = parse(background(1500, 1500, 42)).querySelectorAll('[data-role="star"]').length;
+
+    expect(maximumCount).toBeGreaterThan(defaultCount);
+    expect(maximumCount).toBeLessThanOrEqual(7_000);
+  });
+
+  it('never reduces the star count as permitted canvas area increases', () => {
+    const counts = [100, 300, 600, 900, 1200, 1500].map(
+      (size) => parse(background(size, size, 42)).querySelectorAll('[data-role="star"]').length,
+    );
+
+    expect(counts.every((count, index) => index === 0 || count >= counts[index - 1]!)).toBe(true);
   });
 
   it('varies star opacity across the field', () => {

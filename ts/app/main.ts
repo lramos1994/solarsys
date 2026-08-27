@@ -7,6 +7,7 @@ import {
   DEFAULT_PLANET,
   presetFor,
   readControls,
+  type RawSceneControls,
 } from './controls';
 import { downloadSvg } from './download';
 import { icon } from './icons';
@@ -19,15 +20,11 @@ import {
 import { createSceneStore } from './store';
 import type { RawSceneInput } from './validation';
 
-/**
- * Pick browser entropy for a new user-requested seed, never for generation.
- * The generator remains pure and deterministic: this only chooses its next
- * input. Incrementing the one collision guarantees the requested seed differs.
- */
-function newSeedExcluding(current: number | null): number {
-  const candidate = crypto.getRandomValues(new Uint32Array(1))[0] ?? 0;
+/** Scene identity is intentionally fixed until a future seed-control change. */
+const FIXED_SCENE_SEED = 20_260_826;
 
-  return candidate === current ? (candidate + 1) >>> 0 : candidate;
+function withFixedSeed(controls: RawSceneControls): RawSceneInput {
+  return { ...controls, seed: String(FIXED_SCENE_SEED) };
 }
 
 /**
@@ -38,7 +35,6 @@ function newSeedExcluding(current: number | null): number {
 const CONTROL_FOR_FIELD: Record<string, string> = {
   canvasWidth: 'canvasWidth',
   canvasHeight: 'canvasHeight',
-  seed: 'seed',
   palette: 'palette',
   planetSize: 'planetSize',
   orbitDistance: 'planetDistance',
@@ -91,40 +87,35 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `</header>` +
     `<form id="controls" novalidate>` +
     `${controlsMarkup(initial, { collapsed: collapsedPlanets })}</form>` +
-    `<p class="seed-line" data-role="scene-telemetry" aria-label="Current scene telemetry">` +
-    `<span class="telemetry-label">Current scene seed</span>` +
-    `<output data-role="current-seed"></output>` +
-    `</p>` +
     `<ul data-role="errors" aria-live="polite"></ul>` +
     `</aside>` +
     `<section class="preview-pane" data-role="instrument-stage" aria-label="Observatory preview stage">` +
     `<header class="stage-heading">` +
     `<div><p class="eyebrow">Live observatory</p><h2>Generated scene</h2></div>` +
-    `<span class="stage-status">Live render</span>` +
+    `<div class="stage-actions" data-role="instrument-actions" aria-label="Scene actions">` +
+    `<button type="button" data-action="toggle-playback">` +
+    `${icon('pause')}<span data-role="playback-label">Pause animation</span></button>` +
+    `<button type="button" data-action="download-svg">` +
+    `${icon('download')}<span>Download SVG</span></button>` +
+    `</div>` +
     `</header>` +
     `<div id="preview"></div>` +
     `<p data-role="reduced-motion-notice" hidden>` +
     `Your system asks for reduced motion, so the scene starts paused. ` +
     `Downloaded files always animate.` +
     `</p>` +
-    `<div class="preview-actions" data-role="instrument-actions" aria-label="Scene actions">` +
-    `<button type="button" data-action="toggle-playback">` +
-    `${icon('pause')}<span data-role="playback-label">Pause animation</span></button>` +
-    `<button type="button" data-action="download-svg">` +
-    `${icon('download')}<span>Download SVG</span></button>` +
-    `</div>` +
     `</section>` +
     `</div>`;
 
   const form = root.querySelector<HTMLFormElement>('#controls');
   const preview = root.querySelector<HTMLElement>('#preview');
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
-  const seedDisplay = root.querySelector<HTMLOutputElement>('[data-role="current-seed"]');
+
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
   const playbackButton = root.querySelector<HTMLButtonElement>('[data-action="toggle-playback"]');
   const notice = root.querySelector<HTMLElement>('[data-role="reduced-motion-notice"]');
 
-  if (!form || !preview || !errorList || !seedDisplay || !downloadButton || !playbackButton || !notice) {
+  if (!form || !preview || !errorList || !downloadButton || !playbackButton || !notice) {
     throw new Error('Application shell failed to mount its own markup.');
   }
 
@@ -140,7 +131,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   let explained = startsPaused;
 
   /** Re-render the form, preserving collapse state across the rebuild. */
-  function rebuild(input: RawSceneInput): void {
+  function rebuild(input: RawSceneControls): void {
     form!.innerHTML = controlsMarkup(input, { collapsed: collapsedPlanets });
   }
 
@@ -252,7 +243,6 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       }
     }
 
-    seedDisplay!.value = state.seed === null ? '' : String(state.seed);
     renderDerived();
     renderPlayback();
   }
@@ -299,7 +289,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   store.subscribe(render);
 
   function submit(): void {
-    store.submit(readControls(form!));
+    store.submit(withFixedSeed(readControls(form!)));
   }
 
   form.addEventListener('change', (event) => {
@@ -443,17 +433,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
     const input = readControls(form);
 
-    if (button.dataset.action === 'new-seed') {
-      rebuild({
-        ...input,
-        seed: String(newSeedExcluding(store.getState().seed)),
-      });
-      submit();
-
-      return;
-    }
-
-    let planets: readonly RawSceneInput['planets'][number][];
+    let planets: readonly RawSceneControls['planets'][number][];
 
     if (button.dataset.action === 'add-planet') {
       planets = [...input.planets, { ...DEFAULT_PLANET }];

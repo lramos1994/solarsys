@@ -363,55 +363,31 @@ test.describe('palette selection (CTL-005, CX-011)', () => {
   });
 });
 
-test.describe('seed control (CTL-006)', () => {
-  test('displays the seed that produced the current scene', async ({ page }) => {
-    await expect(page.locator('[data-control="seed"]')).toHaveValue('20260826');
-    await expect(page.locator('[data-role="current-seed"]')).toHaveText('20260826');
+test.describe('fixed scene seed (CX-013)', () => {
+  test('does not surface a seed control, action, or telemetry value', async ({ page }) => {
+    await expect(page.locator('[data-control="seed"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="new-seed"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="current-seed"]')).toHaveCount(0);
   });
 
-  test('reproduces a scene when the same seed is entered again', async ({ page }) => {
-    const seed = page.locator('[data-control="seed"]');
+  test('renders byte-identical scenes across fresh application loads', async ({ page }) => {
+    const first = await page.locator('#preview').innerHTML();
+    const secondPage = await page.context().newPage();
 
-    await setValue(seed, '42');
-    const expected = await page.locator('#preview').innerHTML();
-
-    await setValue(seed, '43');
-    await setValue(seed, '42');
-
-    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
-    expect(await page.locator('#preview').innerHTML()).toBe(expected);
+    try {
+      await secondPage.goto('/');
+      await expect(secondPage.locator('#preview svg')).toBeVisible();
+      expect(await secondPage.locator('#preview').innerHTML()).toBe(first);
+    } finally {
+      await secondPage.close();
+    }
   });
 
-  test('preserves the current seed when another parameter changes', async ({ page }) => {
-    const seed = page.locator('[data-control="seed"]');
+  test('does not draw browser entropy to choose the application seed', async () => {
+    const mainSource = await readFile('ts/app/main.ts', 'utf8');
 
-    await setValue(seed, '42');
-    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
-
-    await expect(seed).toHaveValue('42');
-    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
-  });
-
-  test('generates and displays a different seed on request', async ({ page }) => {
-    const seed = page.locator('[data-control="seed"]');
-    const beforeSeed = await seed.inputValue();
-    const beforeScene = await page.locator('#preview').innerHTML();
-
-    await page.locator('[data-action="new-seed"]').click();
-
-    const afterSeed = await seed.inputValue();
-
-    expect(afterSeed).not.toBe(beforeSeed);
-    await expect(page.locator('[data-role="current-seed"]')).toHaveText(afterSeed);
-    expect(await page.locator('#preview').innerHTML()).not.toBe(beforeScene);
-  });
-
-  test('retains the displayed seed when a pending seed is invalid', async ({ page }) => {
-    await setValue(page.locator('[data-control="seed"]'), '42');
-    await setValue(page.locator('[data-control="seed"]'), '-1');
-
-    await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
-    await expect(page.locator('[data-role="current-seed"]')).toHaveText('42');
+    expect(mainSource).not.toContain('crypto.getRandomValues');
+    expect(mainSource).not.toContain('Math.random');
   });
 });
 
@@ -445,10 +421,10 @@ test.describe('generator-owned values (CTL-009)', () => {
     );
   });
 
-  test('re-derives generator-owned values from a new seed', async ({ page }) => {
-    // Generator-owned values have no control, so the seed is the ONLY way a
-    // user can influence them. Read them from the rendered scene rather than
-    // comparing whole markup, which would also change with user parameters.
+  test('keeps generator-owned values stable when a user parameter changes', async ({ page }) => {
+    // Generator-owned values have no control and the app holds a fixed seed.
+    // Read them from the rendered scene rather than comparing whole markup,
+    // which must change with the edited planet size.
     const ambientFingerprint = async (): Promise<string> =>
       page.locator('#preview').evaluate((node) => {
         const roles = ['star', 'asteroid', 'comet', 'ring'];
@@ -468,18 +444,13 @@ test.describe('generator-owned values (CTL-009)', () => {
     // Control: the fingerprint must actually observe something.
     expect(before).not.toBe('star:0:|asteroid:0:|comet:0:|ring:0:');
 
-    const width = page.locator('[data-control="canvasWidth"]');
     const planetSize = page.locator('[data-control="planetSize"]').first();
-    const widthBefore = await width.inputValue();
     const sizeBefore = await planetSize.inputValue();
 
-    await page.locator('[data-action="new-seed"]').click();
+    await setValue(planetSize, '30');
 
-    // User-owned parameters are untouched, so any difference below is the
-    // generator re-deriving its own values from the new seed.
-    await expect(width).toHaveValue(widthBefore);
-    await expect(planetSize).toHaveValue(sizeBefore);
-    expect(await ambientFingerprint()).not.toBe(before);
+    await expect(planetSize).not.toHaveValue(sizeBefore);
+    expect(await ambientFingerprint()).toBe(before);
   });
 });
 
@@ -568,7 +539,7 @@ test.describe('invalid input (CTL-007)', () => {
 
     expect(message).toContain('Canvas width');
     expect(message).toContain('100');
-    expect(message).toContain('2000');
+    expect(message).toContain('1500');
   });
 
   test('recovers once the value is valid again', async ({ page }) => {

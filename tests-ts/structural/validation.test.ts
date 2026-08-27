@@ -103,15 +103,23 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
     );
   });
 
-  it('records the bounds decided in task 1.7', () => {
-    expect(BOUNDS.canvasWidth).toEqual({ min: 100, max: 2_000 });
-    expect(BOUNDS.canvasHeight).toEqual({ min: 100, max: 2_000 });
-    expect(BOUNDS.planetSize).toEqual({ min: 1, max: 250 });
-    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 5_000 });
-    expect(BOUNDS.moonSize).toEqual({ min: 1, max: 100 });
+  it('records the ergonomics bounds', () => {
+    expect(BOUNDS.canvasWidth).toEqual({ min: 100, max: 1_500 });
+    expect(BOUNDS.canvasHeight).toEqual({ min: 100, max: 1_500 });
+    expect(BOUNDS.planetSize).toEqual({ min: 1, max: 100 });
+    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 1_200 });
+    expect(BOUNDS.moonSize).toEqual({ min: 1, max: 40 });
     expect(BOUNDS.moonDistance).toEqual({ min: 0, max: 1_000 });
     expect(BOUNDS.moonPeriod).toEqual({ min: 1, max: 120 });
     expect(BOUNDS.seed).toEqual({ min: 0, max: 4_294_967_295 });
+  });
+
+  it('keeps body and orbit maxima proportionate to the largest canvas', () => {
+    const largestCanvas = BOUNDS.canvasWidth.max;
+
+    expect(BOUNDS.planetSize.max).toBeLessThanOrEqual(largestCanvas / 10);
+    expect(BOUNDS.moonSize.max).toBeLessThanOrEqual(largestCanvas / 10);
+    expect(BOUNDS.orbitDistance.max).toBeLessThanOrEqual(largestCanvas * 2);
   });
 
   for (const { field, bound, build } of NUMERIC_CASES) {

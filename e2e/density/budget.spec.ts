@@ -16,10 +16,10 @@ import { expect, test } from '@playwright/test';
  */
 
 /** CD-001: the default three-planet scene must fit the desktop control pane. */
-const DESKTOP_FORM_CEILING = 620;
+const DESKTOP_FORM_CEILING = 560;
 
 /** CD-001: bounded narrow scroll, down from a measured 2336px. */
-const MOBILE_DOCUMENT_CEILING = 1400;
+const MOBILE_DOCUMENT_CEILING = 1250;
 
 /** CD-002: a collapsed planet group is a summary row, not a panel. */
 const COLLAPSED_GROUP_CEILING = 64;
@@ -44,6 +44,7 @@ async function measureSurface(page: import('@playwright/test').Page) {
       formHeight: form.getBoundingClientRect().height,
       paneScrollHeight: pane.scrollHeight,
       paneClientHeight: pane.clientHeight,
+      paneWidth: pane.getBoundingClientRect().width,
       documentScrollHeight: document.documentElement.scrollHeight,
       emptyErrorHeight,
     };
@@ -87,7 +88,6 @@ test.describe('control deck density budget (CD-001)', () => {
     const required = [
       'canvasWidth',
       'canvasHeight',
-      'seed',
       'palette',
       'planetSize',
       'planetDistance',
@@ -104,6 +104,23 @@ test.describe('control deck density budget (CD-001)', () => {
     const measured = await measureSurface(page);
 
     expect(measured.formHeight).toBeLessThanOrEqual(DESKTOP_FORM_CEILING);
+  });
+});
+
+test.describe('wider control deck (CD-005)', () => {
+  test('uses the allocated desktop column without taking preview width', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/');
+    await page.waitForSelector('#controls [data-control]');
+
+    const measured = await measureSurface(page);
+    const preview = await page.locator('.preview-pane').boundingBox();
+    const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+
+    expect(measured.paneWidth).toBeGreaterThanOrEqual(420);
+    expect(measured.paneWidth).toBeLessThanOrEqual(480);
+    expect(preview?.width).toBeGreaterThan(0);
+    expect(overflow).toBeLessThanOrEqual(1);
   });
 });
 
@@ -147,7 +164,7 @@ test.describe('error space is allocated on demand (CD-006)', () => {
 });
 
 test.describe('the moon sub-group is compact (CX-012)', () => {
-  test('moon controls occupy fewer rows than one row per control', async ({ page }) => {
+  test('moon controls occupy no more than one row per control with visible sliders', async ({ page }) => {
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -160,20 +177,30 @@ test.describe('the moon sub-group is compact (CX-012)', () => {
       await group.locator('[data-action="toggle-planet"]').click();
     }
 
-    // Count DISTINCT vertical bands occupied by the three moon controls. Three
-    // controls sharing two bands is compact; three controls in three bands is
-    // the stacked layout this change retires.
-    const bands = await group.evaluate((node) => {
+    // Count distinct bands and inspect the actual range boxes. The budget must
+    // not be met by putting sliders in the DOM and hiding them with CSS.
+    const measured = await group.evaluate((node) => {
       const controls = ['moonSize', 'moonDistance', 'moonPeriod']
         .map((control) => node.querySelector<HTMLElement>(`[data-control="${control}"]`))
         .filter((element): element is HTMLElement => element !== null);
 
       const tops = controls.map((element) => Math.round(element.getBoundingClientRect().top));
+      const ranges = controls.map((control) => {
+        const id = control.id;
+        const range = node.querySelector<HTMLInputElement>(`[data-range-for="${id}"]`);
+        const rect = range?.getBoundingClientRect();
 
-      return new Set(tops).size;
+        return { width: rect?.width ?? 0, height: rect?.height ?? 0 };
+      });
+
+      return { bands: new Set(tops).size, ranges };
     });
 
-    expect(bands).toBeGreaterThan(0);
-    expect(bands).toBeLessThan(3);
+    expect(measured.bands).toBeGreaterThan(0);
+    expect(measured.bands).toBeLessThanOrEqual(3);
+    for (const range of measured.ranges) {
+      expect(range.width).toBeGreaterThan(0);
+      expect(range.height).toBeGreaterThanOrEqual(24);
+    }
   });
 });

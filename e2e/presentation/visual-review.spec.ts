@@ -75,6 +75,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
           stage: box('[data-role="instrument-stage"]'),
           controls: box('[data-role="instrument-controls"]'),
           actions: box('[data-role="instrument-actions"]'),
+          preview: box('#preview'),
           previewVisible: box('#preview svg') !== null,
           actionsVisible: box('[data-role="instrument-actions"]') !== null,
           telemetryVisible: box('[data-role="scene-telemetry"]') !== null,
@@ -112,7 +113,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
       expect(evidence.actions).not.toBeNull();
       expect(evidence.previewVisible).toBe(true);
       expect(evidence.actionsVisible).toBe(true);
-      expect(evidence.telemetryVisible).toBe(true);
+      expect(evidence.telemetryVisible).toBe(false);
       expect(evidence.allControlsLabelled).toBe(true);
       expect(evidence.inlineErrorsAssociated).toBe(true);
       expect(evidence.focus?.outlineStyle).toBe('solid');
@@ -126,6 +127,10 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
           sceneComputedWidth: evidence.sceneComputedWidth,
         }),
       ).toBeLessThanOrEqual(viewport.height + 1);
+      expect(evidence.preview).not.toBeNull();
+      expect(evidence.actions!.y + evidence.actions!.height).toBeLessThanOrEqual(
+        evidence.preview!.y,
+      );
 
       if (viewport.width === VIEWPORTS.narrow.width) {
         expect(evidence.stage!.y).toBeLessThan(evidence.controls!.y);

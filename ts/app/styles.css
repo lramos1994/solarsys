@@ -161,7 +161,7 @@ body {
 /* Wide viewport: controls beside the preview, controls sticky (UI-004, D-30). */
 @media (min-width: 720px) {
   .app-shell {
-    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
+    grid-template-columns: minmax(420px, 480px) minmax(0, 1fr);
     padding: var(--space-5);
   }
 
@@ -191,7 +191,7 @@ body {
 
 @media (min-width: 1280px) {
   .app-shell {
-    grid-template-columns: 360px minmax(0, 1fr);
+    grid-template-columns: 460px minmax(0, 1fr);
     gap: var(--space-6);
     padding: var(--space-6);
   }
@@ -210,27 +210,8 @@ body {
 
 .stage-heading {
   align-items: center;
+  flex-wrap: wrap;
   padding: 0 var(--space-1) var(--space-1);
-}
-
-.stage-status {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--space-2);
-  color: var(--chrome-status);
-  font-family: var(--font-data);
-  font-size: 0.68rem;
-  letter-spacing: 0.1em;
-  text-transform: uppercase;
-}
-
-.stage-status::before {
-  width: 0.5rem;
-  height: 0.5rem;
-  border: 1px solid currentColor;
-  border-radius: 50%;
-  background: currentColor;
-  content: "";
 }
 
 #preview {
@@ -253,13 +234,12 @@ body {
   max-width: 100%;
 }
 
-.preview-actions {
+.stage-actions {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
   align-items: center;
-  padding-top: var(--space-3);
-  border-top: 1px solid var(--chrome-line);
+  margin-left: auto;
 }
 
 /* ------------------------------------------------------------------- form */
@@ -279,8 +259,7 @@ fieldset {
   margin: 0;
 }
 
-fieldset[data-role="system-instrument"],
-fieldset[data-role="seed-instrument"] {
+fieldset[data-role="system-instrument"] {
   border-top: 1px solid var(--chrome-line);
 }
 
@@ -707,18 +686,20 @@ input[type="checkbox"].switch-input {
   margin: 0;
 }
 
-/* CX-012: the three moon controls share rows instead of stacking one per row,
-   which is what removed the measured 242px cost of enabling a moon. */
+/* CX-012: moon controls remain compact while retaining their range affordance.
+   Each field stays one horizontal label/range/value row rather than hiding the
+   direct-manipulation input to force a two-column grid. */
 .moon-controls {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 0 var(--space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
   margin-top: var(--space-1);
 }
 
 .moon-controls .field {
-  grid-template-columns: 1fr;
-  gap: 0;
+  grid-template-columns: minmax(0, 5.5rem) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  margin: 0;
 }
 
 .moon-controls .field label {
@@ -726,40 +707,8 @@ input[type="checkbox"].switch-input {
 }
 
 .moon-controls .field-value input[type="number"] {
-  flex: 1 1 auto;
-  width: auto;
-}
-
-/* The moon range would not survive two-per-row at a usable width, so the
-   compact sub-group shows the exact figure only. */
-.moon-controls .field-range {
-  display: none;
-}
-
-/* ------------------------------------------------------------------ seed */
-
-.seed-line {
-  display: grid;
-  grid-template-columns: 1fr auto;
-  gap: var(--space-3);
-  align-items: baseline;
-  margin: 0;
-  padding: var(--space-3);
-  border-top: 1px solid var(--chrome-line-strong);
-  border-bottom: 1px solid var(--chrome-line);
-  background: var(--chrome-telemetry);
-  font-size: 0.75rem;
-  color: var(--chrome-text-muted);
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-}
-
-.seed-line output {
-  font-family: var(--font-data);
-  color: var(--chrome-primary-action);
-  font-size: 0.9rem;
-  font-weight: 650;
-  letter-spacing: 0.04em;
+  flex: 0 0 3.75rem;
+  width: 3.75rem;
 }
 
 /* ----------------------------------------------------------------- errors */

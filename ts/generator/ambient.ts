@@ -30,6 +30,39 @@ const STAR_TIERS = [
   { divisor: 900, scale: 1.2, opacity: '1.0' },
 ] as const;
 
+/** The default 600px canvas plus the generator's five-unit ambient margin. */
+const STAR_DAMPING_REFERENCE_AREA = 605 * 605;
+
+/** Total rendered stars, including the four-to-seven bright foreground stars. */
+const MAX_RENDERED_STARS = 7_000;
+
+const STAR_DENSITY = STAR_TIERS.reduce((total, tier) => total + 1 / tier.divisor, 0);
+
+/**
+ * Allocate a fixed star budget across the legacy tiers by their original
+ * relative densities. Largest-remainder tie breaking is tier order, so the
+ * allocation remains deterministic without drawing extra random values.
+ */
+function allocateStarBudget(budget: number): number[] {
+  const provisional = STAR_TIERS.map((tier, index) => {
+    const exact = (budget * (1 / tier.divisor)) / STAR_DENSITY;
+
+    return { index, count: Math.floor(exact), remainder: exact % 1 };
+  });
+  let remaining = budget - provisional.reduce((total, tier) => total + tier.count, 0);
+
+  for (const tier of [...provisional].sort((a, b) => b.remainder - a.remainder || a.index - b.index)) {
+    if (remaining === 0) {
+      break;
+    }
+
+    tier.count += 1;
+    remaining -= 1;
+  }
+
+  return provisional.map((tier) => tier.count);
+}
+
 /**
  * Render the gradient background, the layered starfield, and the closing
  * vignette. Star counts and positions are drawn from the seeded generator.
@@ -42,6 +75,7 @@ export function renderBackground(
 ): string {
   const width = canvas.width + CANVAS_MARGIN;
   const height = canvas.height + CANVAS_MARGIN;
+  const area = width * height;
   const background = palette.background;
   const vignetteColor = background[3];
 
@@ -81,8 +115,24 @@ export function renderBackground(
     out += `<rect data-role="nebula" width="${width}" height="${height}" fill="url(#${id})"/>`;
   });
 
-  for (const tier of STAR_TIERS) {
-    const count = Math.trunc((width * height) / tier.divisor);
+  // Preserve the legacy loop count and PRNG consumption at and below the
+  // default canvas. Above it, density grows with sqrt(area) and has a firm
+  // ceiling, preventing a permitted large canvas from overwhelming the SVG
+  // compositor. Bright stars are included in the total budget.
+  const boundedDensity = area > STAR_DAMPING_REFERENCE_AREA;
+  const boundedBrightCount = boundedDensity ? randomInt(random, 4, 7) : null;
+  const totalBudget = boundedDensity
+    ? Math.min(
+        MAX_RENDERED_STARS,
+        Math.floor(STAR_DENSITY * Math.sqrt(area * STAR_DAMPING_REFERENCE_AREA)),
+      )
+    : null;
+  const tierCounts = boundedDensity
+    ? allocateStarBudget(totalBudget! - boundedBrightCount!)
+    : STAR_TIERS.map((tier) => Math.trunc(area / tier.divisor));
+
+  for (const [index, tier] of STAR_TIERS.entries()) {
+    const count = tierCounts[index]!;
 
     for (let star = 0; star < count; star += 1) {
       const x = randomInt(random, 0, width * 10) / 10;
@@ -96,7 +146,7 @@ export function renderBackground(
     }
   }
 
-  const brightCount = randomInt(random, 4, 7);
+  const brightCount = boundedBrightCount ?? randomInt(random, 4, 7);
 
   for (let bright = 0; bright < brightCount; bright += 1) {
     const x = randomInt(random, 0, width * 10) / 10;

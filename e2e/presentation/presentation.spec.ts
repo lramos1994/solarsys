@@ -179,11 +179,11 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     expect(tokens['--font-interface']).not.toBe(tokens['--font-data']);
   });
 
-  test('marks the stage, instrument controls, actions, and telemetry as semantic regions', async ({ page }) => {
+  test('marks the stage, instrument controls, and actions as semantic regions', async ({ page }) => {
     await expect(page.locator('[data-role="instrument-stage"]')).toHaveCount(1);
     await expect(page.locator('[data-role="instrument-controls"]')).toHaveCount(1);
     await expect(page.locator('[data-role="instrument-actions"]')).toHaveCount(1);
-    await expect(page.locator('[data-role="scene-telemetry"]')).toHaveCount(1);
+    await expect(page.locator('[data-role="scene-telemetry"]')).toHaveCount(0);
 
     const stage = page.locator('[data-role="instrument-stage"]');
     const controls = page.locator('[data-role="instrument-controls"]');
@@ -192,16 +192,9 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     await expect(controls).toHaveAttribute('aria-label', /instrument|configuration/i);
   });
 
-  test('presents the current seed as labelled, updating telemetry', async ({ page }) => {
-    const telemetry = page.locator('[data-role="scene-telemetry"]');
-    const seed = telemetry.locator('[data-role="current-seed"]');
-
-    await expect(telemetry.locator('.telemetry-label')).toHaveText(/current scene seed/i);
-    await expect(seed).not.toHaveText('');
-
-    const previous = await seed.textContent();
-    await page.locator('[data-action="new-seed"]').click();
-    await expect(seed).not.toHaveText(previous ?? '');
+  test('retires seed telemetry rather than leaving it hidden in the stage chrome', async ({ page }) => {
+    await expect(page.locator('[data-role="scene-telemetry"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="current-seed"]')).toHaveCount(0);
   });
 
   test('keeps the stage primary and overflow-free across the viewport matrix', async ({ page }) => {
@@ -260,7 +253,7 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
   });
 
-  test('keeps stage, telemetry, actions, association, and focus clear in an error state', async ({ page }) => {
+  test('keeps stage, actions, association, and focus clear in an error state', async ({ page }) => {
     const preview = page.locator('#preview');
     const before = await preview.innerHTML();
     const control = page.locator('[data-control="canvasWidth"]');
@@ -271,7 +264,6 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     await expect(control).toHaveAttribute('aria-invalid', 'true');
     await expect(page.locator(`#${await control.getAttribute('aria-describedby')}`)).toBeVisible();
     expect(await preview.innerHTML()).toBe(before);
-    await expect(page.locator('[data-role="scene-telemetry"]')).toBeVisible();
     await expect(page.locator('[data-role="instrument-actions"]')).toBeVisible();
 
     await control.focus();
@@ -295,6 +287,24 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     expect(transitions.animation).toBe('none');
     await expect(page.locator('[data-role="reduced-motion-notice"]')).toBeVisible();
     await expect(page.locator('[data-action="toggle-playback"]')).toHaveAttribute('aria-pressed', 'true');
+  });
+});
+
+test.describe('stage actions (UI-004, UI-005)', () => {
+  test('places playback and download above the preview in every required viewport', async ({ page }) => {
+    for (const viewport of [NARROW, WIDE, EXTRA_WIDE]) {
+      await page.setViewportSize(viewport);
+      await page.goto('/');
+      await expect(page.locator('#preview svg')).toBeVisible();
+
+      const preview = await page.locator('#preview').boundingBox();
+      const actions = await page.locator('[data-role="instrument-actions"]').boundingBox();
+
+      expect(preview, `${viewport.width}px preview`).not.toBeNull();
+      expect(actions, `${viewport.width}px actions`).not.toBeNull();
+      expect(actions!.y + actions!.height, `${viewport.width}px action bottom`).toBeLessThanOrEqual(preview!.y);
+      expect(actions!.y + actions!.height).toBeLessThanOrEqual(viewport.height);
+    }
   });
 });
 
@@ -403,9 +413,8 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
 
   test('bounded scalar inputs are type=number with native min/max/step', async ({ page }) => {
     const expected = {
-      canvasWidth: { min: '100', max: '2000' },
-      canvasHeight: { min: '100', max: '2000' },
-      seed: { min: '0', max: '4294967295' },
+      canvasWidth: { min: '100', max: '1500' },
+      canvasHeight: { min: '100', max: '1500' },
     };
 
     for (const [control, bounds] of Object.entries(expected)) {
@@ -427,7 +436,7 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     );
     await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
       'max',
-      '250',
+      '100',
     );
   });
 
@@ -453,7 +462,7 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
 
     expect(message).toContain('Canvas width');
     expect(message).toContain('100');
-    expect(message).toContain('2000');
+    expect(message).toContain('1500');
   });
 });
 
@@ -639,8 +648,8 @@ test.describe('contrast (UI-006)', () => {
     }
   });
 
-  test('muted text remains discernible', async ({ page }) => {
-    const { text, background } = await textAndBackground(page, '.seed-line');
+  test('muted helper text remains discernible', async ({ page }) => {
+    const { text, background } = await textAndBackground(page, '.pane-heading > p:last-child');
 
     expect(contrastRatio(text, background)).toBeGreaterThanOrEqual(3);
   });

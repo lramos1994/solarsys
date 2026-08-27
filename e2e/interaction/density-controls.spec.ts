@@ -12,13 +12,12 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
 
 /** BOUNDS as declared by `ts/app/validation.ts`, mirrored for assertions. */
 const BOUNDS = {
-  canvasWidth: { min: 100, max: 2000 },
-  canvasHeight: { min: 100, max: 2000 },
-  planetSize: { min: 1, max: 250 },
-  moonSize: { min: 1, max: 100 },
+  canvasWidth: { min: 100, max: 1500 },
+  canvasHeight: { min: 100, max: 1500 },
+  planetSize: { min: 1, max: 100 },
+  moonSize: { min: 1, max: 40 },
   moonDistance: { min: 0, max: 1000 },
   moonPeriod: { min: 1, max: 120 },
-  seed: { min: 0, max: 4_294_967_295 },
 } as const;
 
 function group(page: Page, index: number): Locator {
@@ -111,15 +110,13 @@ test.describe('collapsible instruments (CD-002)', () => {
     expect(await isOpen(group(page, 0))).toBe(true);
   });
 
-  test('toggling a group changes neither the scene nor the seed', async ({ page }) => {
+  test('toggling a group changes neither the scene nor its fixed identity', async ({ page }) => {
     const before = await previewMarkup(page);
-    const seedBefore = await page.locator('[data-role="current-seed"]').textContent();
 
     await collapse(page, 0);
     await expand(page, 1);
 
     expect(await previewMarkup(page)).toBe(before);
-    expect(await page.locator('[data-role="current-seed"]').textContent()).toBe(seedBefore);
   });
 
   test('a collapsed planet is still read and still generated', async ({ page }) => {
@@ -348,20 +345,51 @@ test.describe('paired range and exact entry (CX-001)', () => {
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
   });
 
-  test('identity and dual-form parameters offer no range', async ({ page }) => {
-    // The seed is an identity, and orbital distance accepts four values.
-    for (const control of ['seed', 'planetDistance'] as const) {
-      const target = page.locator(`[data-control="${control}"]`).first();
-      const id = await target.getAttribute('id');
+  test('the dual-form orbital distance offers no range', async ({ page }) => {
+    const target = page.locator('[data-control="planetDistance"]').first();
+    const id = await target.getAttribute('id');
 
-      await expect(page.locator(`[data-range-for="${id}"]`)).toHaveCount(0);
+    await expect(page.locator(`[data-range-for="${id}"]`)).toHaveCount(0);
+  });
+
+  test('every moon magnitude has a visible, usable range control', async ({ page }) => {
+    await expand(page, 1);
+
+    for (const control of ['moonSize', 'moonDistance', 'moonPeriod'] as const) {
+      const numeric = group(page, 1).locator(`[data-control="${control}"]`);
+      const id = await numeric.getAttribute('id');
+      const range = group(page, 1).locator(`[data-range-for="${id}"]`);
+
+      await expect(range).toBeVisible();
+      const box = await range.boundingBox();
+      expect(box?.width, `${control} range width`).toBeGreaterThan(0);
+      expect(box?.height, `${control} range height`).toBeGreaterThanOrEqual(24);
     }
+  });
 
-    // The seed nonetheless still publishes its declared bounds.
-    await expect(page.locator('[data-control="seed"]')).toHaveAttribute(
-      'max',
-      String(BOUNDS.seed.max),
-    );
+  test('moon ranges synchronize their exact values and regenerate the preview', async ({ page }) => {
+    await expand(page, 1);
+
+    const planet = group(page, 1);
+    const size = planet.locator('[data-control="moonSize"]');
+    const sizeId = await size.getAttribute('id');
+    const sizeRange = planet.locator(`[data-range-for="${sizeId}"]`);
+    const moonBody = page.locator('#preview [data-role="planet"]').nth(1)
+      .locator(':scope > [data-role="moon"] [data-role="moon-body"]');
+
+    await sizeRange.fill('8');
+    await expect(size).toHaveValue('8');
+    await expect(moonBody).toHaveAttribute('r', '8');
+
+    const period = planet.locator('[data-control="moonPeriod"]');
+    const periodId = await period.getAttribute('id');
+    const periodRange = planet.locator(`[data-range-for="${periodId}"]`);
+
+    await setValue(period, '30');
+    await expect(periodRange).toHaveValue('30');
+    await periodRange.focus();
+    await page.keyboard.press('ArrowRight');
+    await expect(period).toHaveValue('31');
   });
 });
 

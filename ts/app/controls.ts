@@ -8,6 +8,9 @@ import {
   type RawSceneInput,
 } from './validation';
 
+/** Values the mounted control surface may submit; scene identity is app-owned. */
+export type RawSceneControls = Omit<RawSceneInput, 'seed'>;
+
 /**
  * Control surface markup and reading (CTL-001, CTL-002, CX-001, CX-003,
  * CX-010..CX-012, CD-002..CD-006).
@@ -335,7 +338,7 @@ function canvasPresets(width: string, height: string): string {
 }
 
 /** Render the full control surface for a given raw input and view state. */
-export function controlsMarkup(input: RawSceneInput, view: ControlView = {}): string {
+export function controlsMarkup(input: RawSceneControls, view: ControlView = {}): string {
   const collapsed = view.collapsed ?? new Set<number>();
 
   return (
@@ -350,12 +353,6 @@ export function controlsMarkup(input: RawSceneInput, view: ControlView = {}): st
     }) +
     `</fieldset>` +
     paletteGroup(input.palette) +
-    `<fieldset data-role="seed-instrument">` +
-    `<legend>${icon('seed')}<span>Seed</span></legend>` +
-    field('seed', 'Seed', 'seed', input.seed, { glyph: 'seed' }) +
-    `<button type="button" data-action="new-seed">` +
-    `${icon('newSeed')}<span>New seed</span></button>` +
-    `</fieldset>` +
     input.planets
       .map((planet, index) => planetInstrument(planet, index, collapsed))
       .join('') +
@@ -365,7 +362,7 @@ export function controlsMarkup(input: RawSceneInput, view: ControlView = {}): st
 }
 
 /** Read the current control values back as raw strings. */
-export function readControls(root: ParentNode): RawSceneInput {
+export function readControls(root: ParentNode): RawSceneControls {
   const value = (selector: string): string =>
     root.querySelector<HTMLInputElement>(selector)?.value ?? '';
 
@@ -401,7 +398,6 @@ export function readControls(root: ParentNode): RawSceneInput {
   return {
     canvasWidth: value('[data-control="canvasWidth"]'),
     canvasHeight: value('[data-control="canvasHeight"]'),
-    seed: value('[data-control="seed"]'),
     palette,
     planets,
   };
