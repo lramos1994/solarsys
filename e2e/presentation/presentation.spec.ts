@@ -239,7 +239,17 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     await expect(groups).toHaveCount(6);
 
     for (const group of await groups.all()) {
-      await expect(group.locator('legend')).toBeVisible();
+      // A planet instrument is a disclosure (CD-002): its summary is always
+      // visible and identifies the group, and its controls become visible once
+      // expanded. Both halves are asserted rather than assuming every group is
+      // permanently open.
+      await expect(group.locator('summary')).toBeVisible();
+      await expect(group.locator('.summary-title')).toBeVisible();
+
+      if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+        await group.locator('[data-action="toggle-planet"]').click();
+      }
+
       await expect(group.locator('[data-control="planetSize"]')).toBeVisible();
       await expect(group.locator('[data-control="moonEnabled"]')).toBeVisible();
       await expect(group.locator('[data-action="remove-planet"]')).toBeVisible();
@@ -505,6 +515,11 @@ test.describe('inline errors (CX-004, CX-005)', () => {
   test('associates a planet error with the correct card', async ({ page }) => {
     // Planet 2's size is invalid; the inline message must land inside card 2.
     const card = page.locator('[data-planet="1"]');
+
+    // The instrument is a disclosure and planet 2 starts collapsed (CD-002),
+    // so it is expanded first — exactly as a user editing it would.
+    await card.locator('[data-action="toggle-planet"]').click();
+
     const size = card.locator('[data-control="planetSize"]');
 
     await size.fill('999');
@@ -555,17 +570,23 @@ test.describe('focus management (CX-006, CX-008)', () => {
   });
 
   test('moves focus to the next group after a keyboard remove', async ({ page }) => {
+    // The remove affordance lives inside the instrument body, so the group is
+    // expanded first (CD-002).
+    await page.locator('[data-planet="1"] [data-action="toggle-planet"]').click();
     await page.locator('[data-planet="1"] [data-action="remove-planet"]').focus();
     await page.keyboard.press('Enter');
 
     await expect(page.locator('#controls [data-planet]')).toHaveCount(2);
     await page.waitForFunction(
-      () => document.activeElement?.getAttribute('data-action') === 'remove-planet',
+      // Focus lands on the shifted group's disclosure: a control inside a
+      // collapsed instrument is not rendered and cannot take focus, so the
+      // summary is the group's focusable entry point (CD-002, CX-006).
+      () => document.activeElement?.getAttribute('data-action') === 'toggle-planet',
     );
 
     const hooks = await focusedHooks(page);
 
-    expect(hooks.action).toBe('remove-planet');
+    expect(hooks.action).toBe('toggle-planet');
     expect(hooks.planet).toBe('1');
   });
 });

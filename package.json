@@ -16,7 +16,8 @@
     "test:interaction": "playwright test e2e/interaction --project=chromium",
     "test:reduced-motion": "playwright test e2e/reduced-motion --project=chromium-reduced-motion",
     "test:presentation": "playwright test e2e/presentation --project=chromium --project=mobile-chrome --project=mobile-safari",
-    "test:all": "npm run test && npm run test:browser && npm run test:interaction"
+    "test:density": "playwright test e2e/density --project=chromium --project=mobile-chrome",
+    "test:all": "npm run test && npm run test:browser && npm run test:interaction && npm run test:density"
   },
   "repository": {
     "type": "git",
@@ -36,5 +37,8 @@
     "typescript": "^7.0.2",
     "vite": "^8.2.2",
     "vitest": "^4.1.11"
+  },
+  "dependencies": {
+    "lucide": "^1.34.0"
   }
 }

@@ -25,6 +25,46 @@ async function setValue(control: Locator, value: string): Promise<void> {
   await control.blur();
 }
 
+/**
+ * Expand a planet instrument if it is collapsed (CD-002, D-211).
+ *
+ * The deck opens with only the first planet expanded, so a test that operates
+ * a later planet's controls must expand it first — exactly as a user would.
+ * This is idempotent: an already-open group is left alone.
+ */
+async function expandPlanet(page: Page, index: number): Promise<void> {
+  const group = page.locator(`#controls [data-planet="${index}"]`);
+
+  if (await group.evaluate((node) => node.hasAttribute('open'))) {
+    return;
+  }
+
+  await group.locator('[data-action="toggle-planet"]').click();
+  await expect(group).toHaveAttribute('open', '');
+}
+
+/** Expand every planet instrument, for tests that operate the whole set. */
+async function expandAllPlanets(page: Page): Promise<void> {
+  const count = await page.locator('#controls [data-planet]').count();
+
+  for (let index = 0; index < count; index += 1) {
+    await expandPlanet(page, index);
+  }
+}
+
+/**
+ * Select a palette from the swatch group (CX-011).
+ *
+ * The radio itself is visually replaced by its swatch label, so a pointer
+ * click lands on the label — which is what a real user clicks, and what keeps
+ * the native `label[for]` association under test. Clicking the input directly
+ * fails: the label sits over it and intercepts the pointer event.
+ */
+async function selectPalette(page: Page, name: string): Promise<void> {
+  await page.locator(`[data-role="palette-group"] label[for="palette-${name.toLowerCase()}"]`).click();
+  await expect(page.locator(`[data-control="palette"][value="${name}"]`)).toBeChecked();
+}
+
 /** Read the bytes Playwright received for a browser download. */
 async function downloadedBytes(download: Download): Promise<Buffer> {
   const path = await download.path();
@@ -175,6 +215,9 @@ test.describe('planet composition (CTL-003)', () => {
     // Planet 2 is the default planet that has a moon.
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
 
+    // The remove affordance lives inside the instrument body, so the group
+    // must be expanded to operate it (CD-002).
+    await expandPlanet(page, 1);
     await planets.nth(1).locator('[data-action="remove-planet"]').click();
 
     await expect(planets).toHaveCount(2);
@@ -186,6 +229,7 @@ test.describe('planet composition (CTL-003)', () => {
     const planets = page.locator('#controls [data-planet]');
 
     while ((await planets.count()) > 0) {
+      await expandPlanet(page, 0);
       await planets.first().locator('[data-action="remove-planet"]').click();
     }
 
@@ -222,6 +266,8 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 
   test('disabling a moon hides its controls and removes it from the preview', async ({ page }) => {
+    await expandPlanet(page, 1);
+
     const planet = page.locator('#controls [data-planet]').nth(1);
 
     // Planet 2 starts with the default moon enabled.
@@ -239,6 +285,8 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 
   test('applies configured moon size, distance, and period to the preview', async ({ page }) => {
+    await expandPlanet(page, 1);
+
     const planet = page.locator('#controls [data-planet]').nth(1);
     const renderedPlanet = page.locator('#preview [data-role="planet"]').nth(1);
 
@@ -256,12 +304,16 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 });
 
-test.describe('palette selection (CTL-005)', () => {
+test.describe('palette selection (CTL-005, CX-011)', () => {
   test('offers Random plus the six preserved palettes, with Random selected by default', async ({ page }) => {
-    const palette = page.locator('[data-control="palette"]');
+    const options = page.locator('[data-control="palette"]');
 
-    await expect(palette).toHaveValue('Random');
-    await expect(palette.locator('option')).toHaveText([
+    // The palette is a swatch radio group rather than a select (CX-011, D-207):
+    // the selected value is the checked input, and each option shows its
+    // colours while still carrying its name as text.
+    await expect(options).toHaveCount(7);
+    await expect(page.locator('[data-control="palette"]:checked')).toHaveValue('Random');
+    await expect(page.locator('[data-role="palette-group"] .swatch-name')).toHaveText([
       'Random',
       'Aurora',
       'Ember',
@@ -280,18 +332,32 @@ test.describe('palette selection (CTL-005)', () => {
     );
   });
 
+  test('every palette option previews its colours', async ({ page }) => {
+    const swatches = page.locator('[data-role="palette-group"] .swatch');
+
+    await expect(swatches).toHaveCount(7);
+
+    // CX-011's first scenario: EVERY selectable palette shows a sample, not
+    // just the currently selected one.
+    const chipCounts = await swatches.evaluateAll((nodes) =>
+      nodes.map((node) => node.querySelectorAll('.swatch-chip').length),
+    );
+
+    expect(chipCounts.every((count) => count > 0)).toBe(true);
+  });
+
   test('applies a selected named palette and retains it when another parameter changes', async ({ page }) => {
-    const palette = page.locator('[data-control="palette"]');
+    const selected = page.locator('[data-control="palette"]:checked');
     const description = page.locator('#preview desc');
 
-    await palette.selectOption('Ember');
+    await selectPalette(page, 'Ember');
 
-    await expect(palette).toHaveValue('Ember');
+    await expect(selected).toHaveValue('Ember');
     await expect(description).toContainText('Ember');
 
     await setValue(page.locator('[data-control="canvasWidth"]'), '640');
 
-    await expect(palette).toHaveValue('Ember');
+    await expect(selected).toHaveValue('Ember');
     await expect(description).toContainText('Ember');
     expect(await viewBox(page)).toContain('645');
   });

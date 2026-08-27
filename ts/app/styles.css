@@ -267,7 +267,7 @@ body {
 #controls {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
 }
 
 fieldset {
@@ -275,15 +275,19 @@ fieldset {
   border: 0;
   border-radius: 0;
   background: transparent;
-  padding: var(--space-3) 0 0;
+  padding: var(--space-2) 0 0;
   margin: 0;
 }
 
-fieldset[data-role="system-instrument"] {
+fieldset[data-role="system-instrument"],
+fieldset[data-role="seed-instrument"] {
   border-top: 1px solid var(--chrome-line);
 }
 
 legend {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
   padding: 0;
   font-family: var(--font-heading);
   font-weight: 600;
@@ -293,11 +297,23 @@ legend {
   color: var(--chrome-text-muted);
 }
 
+/* --------------------------------------------------------- compact fields */
+
+/* CD-005: label and value share a row instead of stacking, which is what
+   removed the bulk of the measured 99px-per-control cost. The row applies at
+   EVERY width — stacking only on narrow screens was measured at 739px of form
+   against 620px on desktop, so the narrow case needs the row most. The label
+   column simply gets narrower rather than disappearing. */
 .field {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  margin-bottom: var(--space-2);
+  display: grid;
+  grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr);
+  gap: var(--space-1) var(--space-2);
+  align-items: center;
+  margin-bottom: var(--space-1);
+}
+
+.field .field-error {
+  grid-column: 1 / -1;
 }
 
 .field:last-child {
@@ -305,10 +321,70 @@ legend {
 }
 
 .field label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
   font-size: 0.75rem;
   font-weight: 600;
   letter-spacing: 0.025em;
   color: var(--chrome-text-muted);
+}
+
+.field label > span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.field-value {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+}
+
+/* The range is the flexible half of the pair; the number stays a fixed,
+   readable width so the two never fight for space. */
+.field-value input[type="range"] {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.field-value input[type="number"] {
+  flex: 0 0 5.5rem;
+  width: 5.5rem;
+  text-align: right;
+}
+
+.field-value input[type="text"],
+.field-value select {
+  flex: 1 1 auto;
+}
+
+@media (min-width: 720px) {
+  .field {
+    grid-template-columns: minmax(0, 8.5rem) minmax(0, 1fr);
+    gap: var(--space-2);
+  }
+}
+
+/* ------------------------------------------------------- paired controls */
+
+input[type="range"] {
+  accent-color: var(--chrome-primary-action);
+  /* At or above the 24px minimum target size (CD-005). Stated in px, not rem:
+     the base font is 15px here, so 1.5rem is 22.5px and would silently miss
+     the threshold. A bare `height` is also not enough — the native slider
+     computes its own intrinsic box, so the minimum is asserted too. */
+  height: 24px;
+  min-height: 24px;
+  margin: 0;
+  background: transparent;
+}
+
+input[type="range"]:hover {
+  cursor: grab;
 }
 
 input[type="text"],
@@ -319,10 +395,12 @@ select {
   color: var(--chrome-text);
   border: 1px solid var(--chrome-line-strong);
   border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-3);
-  font-size: 0.92rem;
+  padding: var(--space-1) var(--space-2);
+  font-size: 0.85rem;
   font-family: var(--font-data);
   min-width: 0;
+  /* Keeps every control at or above the 24px minimum target (CD-005). */
+  min-height: 24px;
 }
 
 input[type="text"]:hover,
@@ -337,16 +415,123 @@ input[type="checkbox"] {
   height: 1.1rem;
 }
 
+/* ----------------------------------------------------------------- icons */
+
+/* UI-002: icons size in `em` and inherit `currentColor`, so they can never
+   introduce a colour outside the declared semantic roles. */
+.icon {
+  flex: 0 0 auto;
+  width: 1em;
+  height: 1em;
+  stroke-width: 2;
+  vertical-align: -0.125em;
+}
+
+legend .icon {
+  color: var(--chrome-primary-action);
+}
+
+/* --------------------------------------------------- canvas presets */
+
+select[data-preset] {
+  font-family: var(--font-interface);
+}
+
+/* ------------------------------------------------------- palette swatches */
+
+.swatch-group {
+  border-top: 1px solid var(--chrome-line);
+}
+
+.swatch-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(6.5rem, 1fr));
+  gap: var(--space-1);
+  margin-top: var(--space-1);
+}
+
+.swatch {
+  min-width: 0;
+}
+
+/* The radio itself is visually replaced by the swatch, but stays in the
+   accessibility tree and keeps its native keyboard model (CX-011). */
+.swatch input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.swatch label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid var(--chrome-line);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  font-size: 0.72rem;
+  color: var(--chrome-text-muted);
+}
+
+.swatch label:hover {
+  border-color: var(--chrome-primary-action);
+}
+
+/* Selection is signalled by border, background AND weight — never by colour
+   alone (UI-006, UI-008). */
+.swatch input:checked + label {
+  border-color: var(--chrome-primary-action);
+  background: rgba(141, 235, 210, 0.09);
+  color: var(--chrome-text);
+  font-weight: 650;
+}
+
+.swatch input:focus-visible + label {
+  outline: 2px solid var(--chrome-focus);
+  outline-offset: 2px;
+}
+
+.swatch-chips {
+  display: inline-flex;
+  flex: 0 0 auto;
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.swatch-chip {
+  width: 0.55rem;
+  height: 0.9rem;
+}
+
+.swatch-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* ---------------------------------------------------------------- buttons */
 
 button {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
   font: inherit;
+  font-size: 0.82rem;
   cursor: pointer;
   color: var(--chrome-text);
   background: var(--chrome-control);
   border: 1px solid var(--chrome-line-strong);
   border-radius: var(--radius-sm);
-  padding: var(--space-2) var(--space-4);
+  padding: var(--space-1) var(--space-3);
+  min-height: 24px;
 }
 
 button:hover {
@@ -385,17 +570,170 @@ button[data-action="remove-planet"]:hover {
 
 /* ------------------------------------------------------ planet instruments */
 
-fieldset[data-planet] {
+details[data-planet] {
   border-top: 1px solid var(--chrome-line);
   border-left: 2px solid var(--chrome-line-strong);
-  padding: var(--space-3) var(--space-3) var(--space-2);
+  padding: 0;
   background: linear-gradient(90deg, rgba(141, 235, 210, 0.055), transparent 78%);
   position: relative;
 }
 
-fieldset[data-planet] legend {
-  color: var(--chrome-primary-action);
+details[data-planet] > summary {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-3);
+  cursor: pointer;
+  list-style: none;
+  min-height: 2rem;
   font-family: var(--font-data);
+  font-size: 0.78rem;
+  color: var(--chrome-primary-action);
+}
+
+/* Suppress the platform marker so the disclosure icon is the only one. */
+details[data-planet] > summary::-webkit-details-marker {
+  display: none;
+}
+
+details[data-planet] > summary::marker {
+  content: "";
+}
+
+.summary-marker {
+  display: inline-flex;
+  flex: 0 0 auto;
+}
+
+details[data-planet][open] > summary .summary-marker {
+  transform: rotate(90deg);
+}
+
+.summary-title {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-width: 0;
+  font-weight: 650;
+  letter-spacing: 0.05em;
+}
+
+.summary-facts {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-left: auto;
+  color: var(--chrome-text-muted);
+  font-size: 0.72rem;
+}
+
+.summary-moon {
+  display: inline-flex;
+  color: var(--chrome-status);
+}
+
+.planet-body {
+  padding: 0 var(--space-3) var(--space-2);
+}
+
+/* ------------------------------------------------------------ moon group */
+
+.moon-group {
+  margin: var(--space-1) 0;
+  padding-left: var(--space-2);
+  border-left: 1px solid var(--chrome-line);
+}
+
+.switch-field label {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: 24px;
+  cursor: pointer;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: var(--chrome-text-muted);
+}
+
+/* The moon toggle reads as a switch: a track with a travelling knob. State is
+   ALSO carried by the native checked state and the label, never by the visual
+   alone (UI-008). The attribute selector is needed for specificity: the
+   generic `input[type="checkbox"]` rule (0,1,1) outranks a bare class (0,1,0)
+   and would otherwise shrink the switch back below the minimum target size. */
+input[type="checkbox"].switch-input {
+  appearance: none;
+  flex: 0 0 auto;
+  width: 40px;
+  /* 24px, not 1.5rem: the 15px base font would make that 22.5px (CD-005). */
+  height: 24px;
+  margin: 0;
+  border: 1px solid var(--chrome-line-strong);
+  border-radius: 999px;
+  background: var(--chrome-control);
+  cursor: pointer;
+  position: relative;
+}
+
+.switch-input::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 3px;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 50%;
+  background: var(--chrome-text-muted);
+  transform: translateY(-50%);
+}
+
+.switch-input:checked {
+  border-color: var(--chrome-primary-action);
+  background: rgba(141, 235, 210, 0.22);
+}
+
+.switch-input:checked::after {
+  left: auto;
+  right: 3px;
+  background: var(--chrome-primary-action);
+}
+
+.switch-field {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.switch-field label {
+  margin: 0;
+}
+
+/* CX-012: the three moon controls share rows instead of stacking one per row,
+   which is what removed the measured 242px cost of enabling a moon. */
+.moon-controls {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0 var(--space-2);
+  margin-top: var(--space-1);
+}
+
+.moon-controls .field {
+  grid-template-columns: 1fr;
+  gap: 0;
+}
+
+.moon-controls .field label {
+  font-size: 0.68rem;
+}
+
+.moon-controls .field-value input[type="number"] {
+  flex: 1 1 auto;
+  width: auto;
+}
+
+/* The moon range would not survive two-per-row at a usable width, so the
+   compact sub-group shows the exact figure only. */
+.moon-controls .field-range {
+  display: none;
 }
 
 /* ------------------------------------------------------------------ seed */
@@ -436,7 +774,14 @@ ul[data-role="errors"] {
 .field-error {
   color: var(--chrome-status-error);
   font-size: 0.8rem;
-  min-height: 1.2em;
+}
+
+/* CD-006: space is allocated only when a message exists. The element STAYS in
+   the DOM so `aria-describedby` always has a live target (D-209); hiding it
+   with `:empty` is what removed the 187px this surface reserved permanently
+   for messages that were not there. */
+.field-error:empty {
+  display: none;
 }
 
 input[aria-invalid="true"] {
@@ -465,15 +810,23 @@ input[aria-invalid="true"] {
 
 /* Chrome transitions exist only when the user has not asked for reduced
    motion (UI-007). Under `prefers-reduced-motion: reduce` no transition rule
-   applies, so computed transition-duration stays 0s. */
+   applies, so computed transition-duration stays 0s. The disclosure marker and
+   the on-demand error slot are included for the same reason: they are chrome
+   state changes, not content (CD-006, UI-008). */
 @media (prefers-reduced-motion: no-preference) {
   button,
   input[type="text"],
   input[type="number"],
-  select {
+  input[type="range"],
+  select,
+  .swatch label {
     transition:
       background-color 120ms ease,
       border-color 120ms ease,
       color 120ms ease;
+  }
+
+  .summary-marker {
+    transition: transform 120ms ease;
   }
 }
