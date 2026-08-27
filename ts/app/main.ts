@@ -1,4 +1,5 @@
 import { controlsMarkup, DEFAULT_INPUT, DEFAULT_PLANET, readControls } from './controls';
+import { downloadSvg } from './download';
 import { createSceneStore } from './store';
 import type { RawSceneInput } from './validation';
 
@@ -29,14 +30,16 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `<form id="controls" novalidate>${controlsMarkup(initial)}</form>` +
     `<p>Current scene seed: <output data-role="current-seed"></output></p>` +
     `<ul data-role="errors"></ul>` +
-    `<div id="preview"></div>`;
+    `<div id="preview"></div>` +
+    `<button type="button" data-action="download-svg">Download SVG</button>`;
 
   const form = root.querySelector<HTMLFormElement>('#controls');
   const preview = root.querySelector<HTMLElement>('#preview');
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
   const seedDisplay = root.querySelector<HTMLOutputElement>('[data-role="current-seed"]');
+  const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
 
-  if (!form || !preview || !errorList || !seedDisplay) {
+  if (!form || !preview || !errorList || !seedDisplay || !downloadButton) {
     throw new Error('Application shell failed to mount its own markup.');
   }
 
@@ -122,6 +125,14 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       planets,
     });
     submit();
+  });
+
+  downloadButton.addEventListener('click', () => {
+    const { seed, svg } = store.getState();
+
+    if (svg !== null && seed !== null) {
+      downloadSvg(svg, seed);
+    }
   });
 
   submit();
