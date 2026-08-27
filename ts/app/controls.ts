@@ -96,7 +96,7 @@ function planetFieldset(planet: RawPlanetInput, index: number): string {
     : planet.moon;
 
   return (
-    `<fieldset data-planet="${index}">` +
+    `<fieldset data-planet="${index}" data-role="planet-instrument">` +
     `<legend>Planet ${index + 1}</legend>` +
     field(`planet-${index}-size`, 'Size', 'planetSize', planet.size) +
     field(`planet-${index}-distance`, 'Orbital distance', 'planetDistance', planet.distance) +
@@ -124,7 +124,7 @@ export function controlsMarkup(input: RawSceneInput): string {
   ).join('');
 
   return (
-    `<fieldset>` +
+    `<fieldset data-role="system-instrument">` +
     `<legend>Canvas</legend>` +
     field('canvas-width', 'Canvas width', 'canvasWidth', input.canvasWidth) +
     field('canvas-height', 'Canvas height', 'canvasHeight', input.canvasHeight) +

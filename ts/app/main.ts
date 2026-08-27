@@ -53,18 +53,30 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
   root.innerHTML =
     `<div class="app-shell">` +
-    `<aside class="controls-pane">` +
+    `<aside class="controls-pane" data-role="instrument-controls" aria-label="Instrument configuration">` +
+    `<header class="pane-heading">` +
+    `<p class="eyebrow">SolarSys / Control deck</p>` +
+    `<h1>Scene instruments</h1>` +
+    `<p>Calibrate the system, then observe the generated artefact.</p>` +
+    `</header>` +
     `<form id="controls" novalidate>${controlsMarkup(initial)}</form>` +
-    `<p class="seed-line">Current scene seed: <output data-role="current-seed"></output></p>` +
+    `<p class="seed-line" data-role="scene-telemetry" aria-label="Current scene telemetry">` +
+    `<span class="telemetry-label">Current scene seed</span>` +
+    `<output data-role="current-seed"></output>` +
+    `</p>` +
     `<ul data-role="errors" aria-live="polite"></ul>` +
     `</aside>` +
-    `<section class="preview-pane">` +
+    `<section class="preview-pane" data-role="instrument-stage" aria-label="Observatory preview stage">` +
+    `<header class="stage-heading">` +
+    `<div><p class="eyebrow">Live observatory</p><h2>Generated scene</h2></div>` +
+    `<span class="stage-status">Live render</span>` +
+    `</header>` +
     `<div id="preview"></div>` +
     `<p data-role="reduced-motion-notice" hidden>` +
     `Your system asks for reduced motion, so the scene starts paused. ` +
     `Downloaded files always animate.` +
     `</p>` +
-    `<div class="preview-actions">` +
+    `<div class="preview-actions" data-role="instrument-actions" aria-label="Scene actions">` +
     `<button type="button" data-action="toggle-playback">Pause animation</button>` +
     `<button type="button" data-action="download-svg">Download SVG</button>` +
     `</div>` +

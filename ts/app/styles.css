@@ -1,12 +1,7 @@
 /*
- * SolarSys application chrome (UI-001..007, CX-003).
- *
- * Dark, minimal, discreet: the generated scene is the focal point, so the
- * chrome stays quiet. Design tokens live on :root as custom properties
- * (UI-002, D-29); component styles reference the tokens, never literal hex.
- *
- * The generated SVG is intentionally never styled from here — the scene owns
- * its own appearance (scene-generation).
+ * SolarSys observatory chrome (UI-001..007, CX-003).
+ * Semantic tokens distinguish the stage, instruments, telemetry, actions,
+ * status, and focus. The generated SVG is never styled from this file.
  */
 
 /* ---------------------------------------------------------------- tokens */
@@ -14,23 +9,40 @@
 :root {
   color-scheme: dark;
 
-  /* palette */
-  --bg: #0b0f14;
-  --surface: #141a22;
-  --surface-raised: #1c2430;
-  --border: #3a4656;
-  --border-strong: #4c5b70;
-  --text: #e9eef5;
-  --text-muted: #a9b4c4;
-  --accent: #5ee6c8;
-  --accent-ink: #07231d;
-  --danger: #ff8a7a;
-  --focus: #5ee6c8;
+  /* semantic chrome roles */
+  --chrome-page-bg: #070b10;
+  --chrome-preview-frame: #111923;
+  --chrome-preview-well: #020509;
+  --chrome-instrument: #0d141c;
+  --chrome-control: #17212c;
+  --chrome-telemetry: #09121a;
+  --chrome-primary-action: #8debd2;
+  --chrome-primary-ink: #061510;
+  --chrome-status: #a9dfc9;
+  --chrome-status-error: #ff998a;
+  --chrome-focus: #ffd166;
+  --chrome-line: #344452;
+  --chrome-line-strong: #50616e;
+  --chrome-text: #e8eef2;
+  --chrome-text-muted: #aebbc5;
+
+  /* compatibility aliases retained for established presentation contracts */
+  --bg: var(--chrome-page-bg);
+  --surface: var(--chrome-instrument);
+  --surface-raised: var(--chrome-control);
+  --border: var(--chrome-line);
+  --border-strong: var(--chrome-line-strong);
+  --text: var(--chrome-text);
+  --text-muted: var(--chrome-text-muted);
+  --accent: var(--chrome-primary-action);
+  --accent-ink: var(--chrome-primary-ink);
+  --danger: var(--chrome-status-error);
+  --focus: var(--chrome-focus);
 
   /* shape */
-  --radius-sm: 6px;
-  --radius: 10px;
-  --radius-lg: 14px;
+  --radius-sm: 3px;
+  --radius: 5px;
+  --radius-lg: 7px;
 
   /* spacing */
   --space-1: 4px;
@@ -40,11 +52,14 @@
   --space-5: 24px;
   --space-6: 32px;
 
-  /* type */
-  --font-ui: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
+  /* local/system typography roles */
+  --font-interface: system-ui, -apple-system, "Segoe UI", Roboto, Helvetica, Arial,
     sans-serif;
-  --font-mono: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
+  --font-heading: "Arial Narrow", "Aptos Display", "Segoe UI", sans-serif;
+  --font-data: ui-monospace, "SF Mono", "Cascadia Mono", Menlo, Consolas,
     monospace;
+  --font-ui: var(--font-interface);
+  --font-mono: var(--font-data);
 }
 
 /* ------------------------------------------------------------------ base */
@@ -60,12 +75,16 @@ body {
   background: var(--bg);
   color: var(--text);
   font-family: var(--font-ui);
-  font-size: 16px;
-  line-height: 1.5;
+  font-size: 15px;
+  line-height: 1.45;
 }
 
 body {
   min-height: 100vh;
+  background-image:
+    linear-gradient(rgba(141, 235, 210, 0.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(141, 235, 210, 0.018) 1px, transparent 1px);
+  background-size: 48px 48px;
 }
 
 /* ----------------------------------------------------------------- layout */
@@ -73,7 +92,7 @@ body {
 .app-shell {
   display: grid;
   grid-template-columns: 1fr;
-  gap: var(--space-5);
+  gap: var(--space-4);
   min-height: 100vh;
   padding: var(--space-4);
 }
@@ -84,7 +103,7 @@ body {
 .preview-pane {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
   min-width: 0;
 }
 
@@ -92,10 +111,57 @@ body {
   order: -1;
 }
 
+.controls-pane {
+  padding: var(--space-4);
+  border-top: 2px solid var(--chrome-line-strong);
+  border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome-instrument);
+}
+
+.pane-heading,
+.stage-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--space-3);
+  align-items: flex-start;
+}
+
+.pane-heading {
+  display: block;
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--chrome-line);
+}
+
+.pane-heading h1,
+.stage-heading h2 {
+  margin: 0;
+  color: var(--chrome-text);
+  font-family: var(--font-heading);
+  font-size: 1.25rem;
+  font-stretch: condensed;
+  font-weight: 650;
+  letter-spacing: 0.035em;
+}
+
+.pane-heading > p:last-child {
+  margin: var(--space-1) 0 0;
+  color: var(--chrome-text-muted);
+  font-size: 0.82rem;
+}
+
+.eyebrow {
+  margin: 0 0 var(--space-1);
+  color: var(--chrome-status);
+  font-family: var(--font-data);
+  font-size: 0.67rem;
+  letter-spacing: 0.15em;
+  text-transform: uppercase;
+}
+
 /* Wide viewport: controls beside the preview, controls sticky (UI-004, D-30). */
 @media (min-width: 720px) {
   .app-shell {
-    grid-template-columns: minmax(280px, 360px) 1fr;
+    grid-template-columns: minmax(300px, 360px) minmax(0, 1fr);
     padding: var(--space-5);
   }
 
@@ -110,17 +176,71 @@ body {
     max-height: calc(100vh - 2 * var(--space-5));
     overflow-y: auto;
   }
+
+  .preview-pane {
+    position: sticky;
+    top: var(--space-5);
+    align-self: start;
+  }
+
+  .preview-pane #preview > svg {
+    /* Reserve the first viewport for heading, status/notice, and actions. */
+    width: calc(100vh - 224px);
+  }
+}
+
+@media (min-width: 1280px) {
+  .app-shell {
+    grid-template-columns: 360px minmax(0, 1fr);
+    gap: var(--space-6);
+    padding: var(--space-6);
+  }
 }
 
 /* --------------------------------------------------------------- preview */
+
+.preview-pane {
+  padding: var(--space-3);
+  border: 1px solid var(--chrome-line-strong);
+  border-top: 2px solid var(--chrome-primary-action);
+  border-radius: var(--radius-lg);
+  background: var(--chrome-preview-frame);
+  box-shadow: 0 18px 60px rgba(0, 0, 0, 0.28);
+}
+
+.stage-heading {
+  align-items: center;
+  padding: 0 var(--space-1) var(--space-1);
+}
+
+.stage-status {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--chrome-status);
+  font-family: var(--font-data);
+  font-size: 0.68rem;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+}
+
+.stage-status::before {
+  width: 0.5rem;
+  height: 0.5rem;
+  border: 1px solid currentColor;
+  border-radius: 50%;
+  background: currentColor;
+  content: "";
+}
 
 #preview {
   display: flex;
   align-items: center;
   justify-content: center;
   min-width: 0;
-  border-radius: var(--radius-lg);
-  background: var(--surface);
+  border: 1px solid #1c2936;
+  border-radius: var(--radius-sm);
+  background: var(--chrome-preview-well);
   overflow: hidden;
 }
 
@@ -137,6 +257,9 @@ body {
   display: flex;
   flex-wrap: wrap;
   gap: var(--space-2);
+  align-items: center;
+  padding-top: var(--space-3);
+  border-top: 1px solid var(--chrome-line);
 }
 
 /* ------------------------------------------------------------------- form */
@@ -144,31 +267,37 @@ body {
 #controls {
   display: flex;
   flex-direction: column;
-  gap: var(--space-4);
+  gap: var(--space-3);
 }
 
 fieldset {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--surface);
-  padding: var(--space-4);
+  min-width: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  padding: var(--space-3) 0 0;
   margin: 0;
 }
 
+fieldset[data-role="system-instrument"] {
+  border-top: 1px solid var(--chrome-line);
+}
+
 legend {
-  padding: 0 var(--space-2);
+  padding: 0;
+  font-family: var(--font-heading);
   font-weight: 600;
   font-size: 0.8rem;
   letter-spacing: 0.08em;
   text-transform: uppercase;
-  color: var(--text-muted);
+  color: var(--chrome-text-muted);
 }
 
 .field {
   display: flex;
   flex-direction: column;
   gap: var(--space-1);
-  margin-bottom: var(--space-3);
+  margin-bottom: var(--space-2);
 }
 
 .field:last-child {
@@ -176,32 +305,34 @@ legend {
 }
 
 .field label {
-  font-size: 0.85rem;
-  font-weight: 500;
-  color: var(--text-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.025em;
+  color: var(--chrome-text-muted);
 }
 
 input[type="text"],
 input[type="number"],
 select {
-  background: var(--surface-raised);
-  color: var(--text);
-  border: 1px solid var(--border-strong);
+  width: 100%;
+  background: var(--chrome-control);
+  color: var(--chrome-text);
+  border: 1px solid var(--chrome-line-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-3);
-  font-size: 1rem;
-  font-family: var(--font-mono);
+  font-size: 0.92rem;
+  font-family: var(--font-data);
   min-width: 0;
 }
 
 input[type="text"]:hover,
 input[type="number"]:hover,
 select:hover {
-  border-color: var(--accent);
+  border-color: var(--chrome-primary-action);
 }
 
 input[type="checkbox"] {
-  accent-color: var(--accent);
+  accent-color: var(--chrome-primary-action);
   width: 1.1rem;
   height: 1.1rem;
 }
@@ -211,36 +342,36 @@ input[type="checkbox"] {
 button {
   font: inherit;
   cursor: pointer;
-  color: var(--text);
-  background: var(--surface-raised);
-  border: 1px solid var(--border-strong);
+  color: var(--chrome-text);
+  background: var(--chrome-control);
+  border: 1px solid var(--chrome-line-strong);
   border-radius: var(--radius-sm);
   padding: var(--space-2) var(--space-4);
 }
 
 button:hover {
-  border-color: var(--accent);
+  border-color: var(--chrome-primary-action);
 }
 
 button[data-action="toggle-playback"] {
-  background: var(--accent);
-  border-color: var(--accent);
-  color: var(--accent-ink);
+  background: var(--chrome-primary-action);
+  border-color: var(--chrome-primary-action);
+  color: var(--chrome-primary-ink);
   font-weight: 600;
 }
 
 button[data-action="add-planet"],
 button[data-action="download-svg"] {
-  border-color: var(--accent);
-  color: var(--accent);
+  border-color: var(--chrome-primary-action);
+  color: var(--chrome-primary-action);
 }
 
 button[data-action="new-seed"] {
-  color: var(--accent);
+  color: var(--chrome-primary-action);
 }
 
 button[data-action="remove-planet"] {
-  color: var(--danger);
+  color: var(--chrome-status-error);
   background: transparent;
   border-color: transparent;
   padding-left: 0;
@@ -252,28 +383,45 @@ button[data-action="remove-planet"]:hover {
   border-color: transparent;
 }
 
-/* ------------------------------------------------------------ planet card */
+/* ------------------------------------------------------ planet instruments */
 
 fieldset[data-planet] {
-  border-left: 3px solid var(--accent);
+  border-top: 1px solid var(--chrome-line);
+  border-left: 2px solid var(--chrome-line-strong);
+  padding: var(--space-3) var(--space-3) var(--space-2);
+  background: linear-gradient(90deg, rgba(141, 235, 210, 0.055), transparent 78%);
   position: relative;
 }
 
 fieldset[data-planet] legend {
-  color: var(--accent);
+  color: var(--chrome-primary-action);
+  font-family: var(--font-data);
 }
 
 /* ------------------------------------------------------------------ seed */
 
 .seed-line {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: var(--space-3);
+  align-items: baseline;
   margin: 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
+  padding: var(--space-3);
+  border-top: 1px solid var(--chrome-line-strong);
+  border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome-telemetry);
+  font-size: 0.75rem;
+  color: var(--chrome-text-muted);
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
 }
 
 .seed-line output {
-  font-family: var(--font-mono);
-  color: var(--text);
+  font-family: var(--font-data);
+  color: var(--chrome-primary-action);
+  font-size: 0.9rem;
+  font-weight: 650;
+  letter-spacing: 0.04em;
 }
 
 /* ----------------------------------------------------------------- errors */
@@ -281,32 +429,35 @@ fieldset[data-planet] legend {
 ul[data-role="errors"] {
   margin: 0;
   padding-left: var(--space-4);
-  color: var(--danger);
+  color: var(--chrome-status-error);
   font-size: 0.85rem;
 }
 
 .field-error {
-  color: var(--danger);
+  color: var(--chrome-status-error);
   font-size: 0.8rem;
   min-height: 1.2em;
 }
 
 input[aria-invalid="true"] {
-  border-color: var(--danger);
+  border-color: var(--chrome-status-error);
+  border-left-width: 3px;
 }
 
 /* ------------------------------------------------------------------ notice */
 
 [data-role="reduced-motion-notice"] {
   margin: 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--chrome-status);
   font-size: 0.85rem;
-  color: var(--text-muted);
+  color: var(--chrome-text-muted);
 }
 
 /* ------------------------------------------------------------------ focus */
 
 :focus-visible {
-  outline: 2px solid var(--focus);
+  outline: 2px solid var(--chrome-focus);
   outline-offset: 2px;
 }
 

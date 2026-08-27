@@ -13,6 +13,7 @@ import { expect, test, type Page } from '@playwright/test';
  */
 
 const WIDE = { width: 1200, height: 800 };
+const EXTRA_WIDE = { width: 1440, height: 900 };
 const NARROW = { width: 400, height: 800 };
 
 /** Parse an `rgb()`/`rgba()` string into channels. */
@@ -142,6 +143,148 @@ test.describe('theme (UI-001, UI-002)', () => {
 
     expect(input).not.toBe('');
     expect(relativeLuminance(input)).toBeLessThan(0.3);
+  });
+});
+
+test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('exposes semantic chrome tokens and distinct typography roles', async ({ page }) => {
+    const tokens = await page.evaluate(() => {
+      const style = getComputedStyle(document.documentElement);
+      const names = [
+        '--chrome-page-bg',
+        '--chrome-preview-frame',
+        '--chrome-instrument',
+        '--chrome-telemetry',
+        '--chrome-primary-action',
+        '--chrome-status-error',
+        '--chrome-focus',
+        '--font-interface',
+        '--font-heading',
+        '--font-data',
+      ];
+
+      return Object.fromEntries(
+        names.map((name) => [name, style.getPropertyValue(name).trim()]),
+      );
+    });
+
+    for (const [name, value] of Object.entries(tokens)) {
+      expect(value, `${name} must resolve to a semantic value`).not.toBe('');
+    }
+    expect(tokens['--font-interface']).not.toBe(tokens['--font-data']);
+  });
+
+  test('marks the stage, instrument controls, actions, and telemetry as semantic regions', async ({ page }) => {
+    await expect(page.locator('[data-role="instrument-stage"]')).toHaveCount(1);
+    await expect(page.locator('[data-role="instrument-controls"]')).toHaveCount(1);
+    await expect(page.locator('[data-role="instrument-actions"]')).toHaveCount(1);
+    await expect(page.locator('[data-role="scene-telemetry"]')).toHaveCount(1);
+
+    const stage = page.locator('[data-role="instrument-stage"]');
+    const controls = page.locator('[data-role="instrument-controls"]');
+
+    await expect(stage).toHaveAttribute('aria-label', /observatory|preview/i);
+    await expect(controls).toHaveAttribute('aria-label', /instrument|configuration/i);
+  });
+
+  test('presents the current seed as labelled, updating telemetry', async ({ page }) => {
+    const telemetry = page.locator('[data-role="scene-telemetry"]');
+    const seed = telemetry.locator('[data-role="current-seed"]');
+
+    await expect(telemetry.locator('.telemetry-label')).toHaveText(/current scene seed/i);
+    await expect(seed).not.toHaveText('');
+
+    const previous = await seed.textContent();
+    await page.locator('[data-action="new-seed"]').click();
+    await expect(seed).not.toHaveText(previous ?? '');
+  });
+
+  test('keeps the stage primary and overflow-free across the viewport matrix', async ({ page }) => {
+    for (const viewport of [NARROW, WIDE, EXTRA_WIDE]) {
+      await page.setViewportSize(viewport);
+
+      const stage = await page.locator('[data-role="instrument-stage"]').boundingBox();
+      const controls = await page.locator('[data-role="instrument-controls"]').boundingBox();
+      const overflow = await page.evaluate(
+        () => document.documentElement.scrollWidth - window.innerWidth,
+      );
+
+      expect(stage, `${viewport.width}px stage`).not.toBeNull();
+      expect(controls, `${viewport.width}px controls`).not.toBeNull();
+      expect(overflow, `${viewport.width}px horizontal overflow`).toBeLessThanOrEqual(1);
+
+      if (viewport.width === NARROW.width) {
+        expect(stage!.y).toBeLessThan(controls!.y);
+        expect(stage!.width).toBeGreaterThan(320);
+      } else {
+        expect(controls!.x).toBeLessThan(stage!.x);
+        expect(stage!.width).toBeGreaterThan(controls!.width);
+      }
+    }
+  });
+
+  test('retains scannable operational groups and a legible stage under dense valid content', async ({ page }) => {
+    await page.setViewportSize(WIDE);
+
+    for (let count = 0; count < 3; count += 1) {
+      await page.locator('[data-action="add-planet"]').click();
+    }
+
+    const groups = page.locator('[data-role="planet-instrument"]');
+    await expect(groups).toHaveCount(6);
+
+    for (const group of await groups.all()) {
+      await expect(group.locator('legend')).toBeVisible();
+      await expect(group.locator('[data-control="planetSize"]')).toBeVisible();
+      await expect(group.locator('[data-control="moonEnabled"]')).toBeVisible();
+      await expect(group.locator('[data-action="remove-planet"]')).toBeVisible();
+    }
+
+    await expect(page.locator('#preview svg')).toBeVisible();
+    await expect(page.locator('[data-role="instrument-actions"]')).toBeVisible();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth)).toBeLessThanOrEqual(1);
+  });
+
+  test('keeps stage, telemetry, actions, association, and focus clear in an error state', async ({ page }) => {
+    const preview = page.locator('#preview');
+    const before = await preview.innerHTML();
+    const control = page.locator('[data-control="canvasWidth"]');
+
+    await control.fill('5');
+    await control.blur();
+
+    await expect(control).toHaveAttribute('aria-invalid', 'true');
+    await expect(page.locator(`#${await control.getAttribute('aria-describedby')}`)).toBeVisible();
+    expect(await preview.innerHTML()).toBe(before);
+    await expect(page.locator('[data-role="scene-telemetry"]')).toBeVisible();
+    await expect(page.locator('[data-role="instrument-actions"]')).toBeVisible();
+
+    await control.focus();
+    const focusColor = await control.evaluate((element) => getComputedStyle(element).outlineColor);
+    const errorColor = await control.evaluate((element) => getComputedStyle(element).borderColor);
+    expect(focusColor).not.toBe(errorColor);
+  });
+
+  test('preserves static chrome communication when reduced motion is requested', async ({ page }) => {
+    await page.emulateMedia({ reducedMotion: 'reduce' });
+    await page.reload();
+    await expect(page.locator('#preview svg')).toBeVisible();
+
+    const transitions = await page.locator('[data-action="toggle-playback"]').evaluate((element) => {
+      const style = getComputedStyle(element);
+
+      return { duration: style.transitionDuration, animation: style.animationName };
+    });
+
+    expect(transitions.duration).toBe('0s');
+    expect(transitions.animation).toBe('none');
+    await expect(page.locator('[data-role="reduced-motion-notice"]')).toBeVisible();
+    await expect(page.locator('[data-action="toggle-playback"]')).toHaveAttribute('aria-pressed', 'true');
   });
 });
 
