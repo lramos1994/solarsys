@@ -1,7 +1,3 @@
 node_modules/
 build/
 e2e/.artifacts/
-
-# Orphaned root-owned leftover from the retired PHP/Docker stack (task 4.5).
-# Remove with `sudo rm -rf vendor`, then drop this entry.
-vendor/
