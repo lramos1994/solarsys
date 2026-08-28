@@ -104,6 +104,20 @@ function focusedHooks(page: Page): Promise<{
   });
 }
 
+/** Open a planet's editing dialog (CX-020), expanding the instrument first. */
+async function openPlanetDialog(page: Page, index: number) {
+  const group = page.locator(`#controls [data-planet="${index}"]`);
+
+  if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+    await group.locator('[data-action="toggle-planet"]').click();
+  }
+
+  await group.locator('[data-action="open-planet-dialog"]').click();
+  const dialog = page.locator(`[data-role="planet-dialog"][data-index="${index}"]`);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 test.describe('theme (UI-001, UI-002)', () => {
   test.beforeEach(async ({ page }) => {
     await page.goto('/');
@@ -243,10 +257,28 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
         await group.locator('[data-action="toggle-planet"]').click();
       }
 
-      await expect(group.locator('[data-control="planetSize"]')).toBeVisible();
-      await expect(group.locator('[data-control="moonEnabled"]')).toBeVisible();
-      await expect(group.locator('[data-action="remove-planet"]')).toBeVisible();
+      // Orbital distance stays in the deck; size/moon/ring moved into the
+      // per-planet dialog (design §5). The deck's visible editing surface is
+      // therefore the orbit control plus the dialog opener, and the dialog
+      // hosts the relocated controls.
+      await expect(group.locator('[data-control="planetDistance"]')).toBeVisible();
+      await expect(group.locator('[data-action="open-planet-dialog"]')).toBeVisible();
+      await expect(
+        group.locator('[data-role="planet-dialog"] [data-control="planetSize"]'),
+      ).toHaveCount(1);
+      await expect(
+        group.locator('[data-role="planet-dialog"] [data-control="moonEnabled"]'),
+      ).toHaveCount(1);
+      await expect(
+        group.locator('[data-role="planet-dialog"] [data-action="remove-planet"]'),
+      ).toHaveCount(1);
     }
+
+    // One open dialog proves the relocated controls are genuinely reachable.
+    const dialog = await openPlanetDialog(page, 0);
+    await expect(dialog.locator('[data-control="planetSize"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonEnabled"]')).toBeVisible();
+    await expect(dialog.locator('[data-action="remove-planet"]')).toBeVisible();
 
     await expect(page.locator('#preview svg')).toBeVisible();
     await expect(page.locator('[data-role="instrument-actions"]')).toBeVisible();
@@ -486,9 +518,15 @@ test.describe('planet cards (CX-003)', () => {
     await expect(cards).toHaveCount(3);
 
     for (const card of await cards.all()) {
-      await expect(card.locator('[data-control="planetSize"]')).toHaveCount(1);
+      // Orbital distance stays in the deck; size and the remove affordance
+      // moved into the planet's dialog (design §5, CX-020).
       await expect(card.locator('[data-control="planetDistance"]')).toHaveCount(1);
-      await expect(card.locator('[data-action="remove-planet"]')).toHaveCount(1);
+      await expect(
+        card.locator('[data-role="planet-dialog"] [data-control="planetSize"]'),
+      ).toHaveCount(1);
+      await expect(
+        card.locator('[data-role="planet-dialog"] [data-action="remove-planet"]'),
+      ).toHaveCount(1);
     }
   });
 });
@@ -530,14 +568,11 @@ test.describe('inline errors (CX-004, CX-005)', () => {
   });
 
   test('associates a planet error with the correct card', async ({ page }) => {
-    // Planet 2's size is invalid; the inline message must land inside card 2.
-    const card = page.locator('[data-planet="1"]');
+    // Planet 2's size is invalid; the inline message must land inside card 2's
+    // dialog, which hosts the relocated size control (CX-020).
+    const dialog = await openPlanetDialog(page, 1);
 
-    // The instrument is a disclosure and planet 2 starts collapsed (CD-002),
-    // so it is expanded first — exactly as a user editing it would.
-    await card.locator('[data-action="toggle-planet"]').click();
-
-    const size = card.locator('[data-control="planetSize"]');
+    const size = dialog.locator('[data-control="planetSize"]');
 
     await size.fill('999');
     await size.blur();
@@ -545,7 +580,7 @@ test.describe('inline errors (CX-004, CX-005)', () => {
     await expect(size).toHaveAttribute('aria-invalid', 'true');
 
     const describedBy = await size.getAttribute('aria-describedby');
-    const message = await card.locator(`#${describedBy}`).textContent();
+    const message = await dialog.locator(`#${describedBy}`).textContent();
 
     expect(message).toContain('planet 2');
   });
@@ -576,21 +611,24 @@ test.describe('focus management (CX-006, CX-008)', () => {
     await page.keyboard.press('Enter');
 
     await expect(page.locator('#controls [data-planet]')).toHaveCount(4);
+    // Size/moon/ring live in the dialog now, so focus lands on the new card's
+    // editing entry point — its "Edit planet N" opener — not a control inside
+    // the closed dialog (CX-006, CX-020).
     await page.waitForFunction(
-      () => document.activeElement?.getAttribute('data-control') === 'planetSize',
+      () => document.activeElement?.getAttribute('data-action') === 'open-planet-dialog',
     );
 
     const hooks = await focusedHooks(page);
 
-    expect(hooks.control).toBe('planetSize');
+    expect(hooks.action).toBe('open-planet-dialog');
     expect(hooks.planet).toBe('3');
   });
 
   test('moves focus to the next group after a keyboard remove', async ({ page }) => {
-    // The remove affordance lives inside the instrument body, so the group is
-    // expanded first (CD-002).
-    await page.locator('[data-planet="1"] [data-action="toggle-planet"]').click();
-    await page.locator('[data-planet="1"] [data-action="remove-planet"]').focus();
+    // The remove affordance lives in the dialog now (CX-020), so the planet's
+    // dialog is opened first to operate it.
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-action="remove-planet"]').focus();
     await page.keyboard.press('Enter');
 
     await expect(page.locator('#controls [data-planet]')).toHaveCount(2);

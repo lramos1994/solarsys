@@ -2,12 +2,12 @@ import { writeFile } from 'node:fs/promises';
 import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 const VIEWPORTS = {
-  narrow: { width: 400, height: 800 },
+  narrow: { width: 390, height: 844 },
   desktop: { width: 1200, height: 800 },
   wide: { width: 1440, height: 900 },
 } as const;
 
-const STATES = ['initial', 'dense-valid', 'validation-error', 'reduced-motion'] as const;
+const STATES = ['initial', 'dense-valid', 'validation-error', 'reduced-motion', 'dialog-open'] as const;
 
 type ReviewState = (typeof STATES)[number];
 
@@ -37,6 +37,19 @@ async function prepareState(page: Page, state: ReviewState): Promise<boolean> {
     await expect(page.locator('[data-role="reduced-motion-notice"]')).toBeVisible();
   }
 
+  if (state === 'dialog-open') {
+    // Open planet 2's dialog (the one with a moon and a ring) so the matrix
+    // measures the fullest editing surface (UI-012).
+    const group = page.locator('#controls [data-planet="1"]');
+
+    if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+      await group.locator('[data-action="toggle-planet"]').click();
+    }
+
+    await group.locator('[data-action="open-planet-dialog"]').click();
+    await expect(page.locator('[data-role="planet-dialog"][data-index="1"]')).toBeVisible();
+  }
+
   return state !== 'validation-error' || (await page.locator('#preview').innerHTML()) === initialPreview;
 }
 
@@ -47,7 +60,10 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
       await page.setViewportSize(viewport);
       const retainedPreview = await prepareState(page, state);
 
-      const focusTarget = page.locator('[data-control="canvasWidth"]');
+      const focusTarget =
+        state === 'dialog-open'
+          ? page.locator('[data-role="planet-dialog"][open] [data-control="planetSize"]')
+          : page.locator('[data-control="canvasWidth"]');
       await focusTarget.focus();
 
       const evidence = await page.evaluate(({ expectedWidth, stateName }) => {
@@ -76,6 +92,7 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
           controls: box('[data-role="instrument-controls"]'),
           actions: box('[data-role="instrument-actions"]'),
           preview: box('#preview'),
+          dialog: box('[data-role="planet-dialog"][open]'),
           previewVisible: box('#preview svg') !== null,
           actionsVisible: box('[data-role="instrument-actions"]') !== null,
           telemetryVisible: box('[data-role="scene-telemetry"]') !== null,
@@ -144,6 +161,20 @@ for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
       expect(evidence.reducedNoticeVisible).toBe(state === 'reduced-motion');
       if (state === 'reduced-motion') {
         expect(evidence.transitionDuration).toBe('0s');
+      }
+
+      if (state === 'dialog-open') {
+        // UI-012: the dialog fits its viewport — no horizontal overflow on the
+        // narrow (390px) viewport and fully visible on the wide (1440x900) one.
+        expect(evidence.dialog, JSON.stringify(evidence.dialog)).not.toBeNull();
+        expect(evidence.dialog!.x).toBeGreaterThanOrEqual(0);
+        expect(evidence.dialog!.y).toBeGreaterThanOrEqual(0);
+        expect(evidence.dialog!.x + evidence.dialog!.width).toBeLessThanOrEqual(
+          viewport.width + 1,
+        );
+        expect(evidence.dialog!.y + evidence.dialog!.height).toBeLessThanOrEqual(
+          viewport.height + 1,
+        );
       }
 
       const screenshot = testInfo.outputPath(`${viewportName}-${state}.png`);

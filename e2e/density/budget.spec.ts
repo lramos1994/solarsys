@@ -51,6 +51,20 @@ async function measureSurface(page: import('@playwright/test').Page) {
   });
 }
 
+/** Open a planet's editing dialog (CX-020), expanding the instrument first. */
+async function openPlanetDialog(page: import('@playwright/test').Page, index: number) {
+  const group = page.locator(`#controls [data-planet="${index}"]`);
+
+  if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+    await group.locator('[data-action="toggle-planet"]').click();
+  }
+
+  await group.locator('[data-action="open-planet-dialog"]').click();
+  const dialog = page.locator(`[data-role="planet-dialog"][data-index="${index}"]`);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 test.describe('control deck density budget (CD-001)', () => {
   test('the default scene fits the desktop control pane without internal scroll', async ({
     page,
@@ -83,27 +97,46 @@ test.describe('control deck density budget (CD-001)', () => {
     await page.waitForSelector('#controls [data-control]');
 
     // Every parameter of the default scene must still be reachable and
-    // editable while the budget holds. Meeting the ceiling by dropping a
-    // control is not an acceptable outcome.
-    const required = [
-      'canvasWidth',
-      'canvasHeight',
-      'palette',
-      'planetSize',
-      'planetDistance',
-      'moonEnabled',
-    ];
+    // editable while the budget holds — deck controls directly, and the
+    // dialog-relocated size/moon controls through their dialog. Meeting the
+    // ceiling by dropping a control is not an acceptable outcome.
+    const deckRequired = ['canvasWidth', 'canvasHeight', 'palette', 'planetDistance'];
 
-    for (const control of required) {
+    for (const control of deckRequired) {
       const first = page.locator(`#controls [data-control="${control}"]`).first();
 
       await expect(first).toBeAttached();
       await expect(first).toBeEditable();
     }
 
+    const dialog = await openPlanetDialog(page, 0);
+
+    for (const control of ['planetSize', 'moonEnabled']) {
+      await expect(dialog.locator(`[data-control="${control}"]`)).toBeEditable();
+    }
+
     const measured = await measureSurface(page);
 
     expect(measured.formHeight).toBeLessThanOrEqual(DESKTOP_FORM_CEILING);
+  });
+
+  test('the orbital distance control stays in the deck', async ({ page }) => {
+    await page.setViewportSize(DESKTOP);
+    await page.goto('/');
+    await page.waitForSelector('#controls [data-control]');
+
+    // CD-008: orbital distance is deliberately NOT relocated (design §5), so it
+    // remains measurable in the deck and contributes height there.
+    const orbit = page.locator('#controls [data-control="planetDistance"]').first();
+
+    await expect(orbit).toBeVisible();
+    const box = await orbit.boundingBox();
+    expect(box).not.toBeNull();
+    expect(box!.height).toBeGreaterThan(0);
+
+    // And it is absent from the dialog.
+    const dialog = await openPlanetDialog(page, 0);
+    await expect(dialog.locator('[data-control="planetDistance"]')).toHaveCount(0);
   });
 });
 
@@ -169,17 +202,13 @@ test.describe('the moon sub-group is compact (CX-012)', () => {
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
 
-    // Planet 2 carries a moon in the default scene. Expand it if collapsed.
-    const group = page.locator('[data-planet="1"]');
-    const isOpen = await group.evaluate((node) => node.hasAttribute('open'));
-
-    if (!isOpen) {
-      await group.locator('[data-action="toggle-planet"]').click();
-    }
+    // Planet 2 carries a moon in the default scene; its controls now live in
+    // the planet dialog (CX-020).
+    const dialog = await openPlanetDialog(page, 1);
 
     // Count distinct bands and inspect the actual range boxes. The budget must
     // not be met by putting sliders in the DOM and hiding them with CSS.
-    const measured = await group.evaluate((node) => {
+    const measured = await dialog.evaluate((node) => {
       const controls = ['moonSize', 'moonDistance', 'moonPeriod']
         .map((control) => node.querySelector<HTMLElement>(`[data-control="${control}"]`))
         .filter((element): element is HTMLElement => element !== null);

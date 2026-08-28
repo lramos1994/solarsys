@@ -24,8 +24,24 @@ test.beforeEach(async ({ page }) => {
   await expect(page.locator('#preview svg')).toBeVisible();
 });
 
+/** Open planet 0's editing dialog, where the size range now lives (CX-020). */
+async function openSizeDialog(page: Page): Promise<void> {
+  const group = page.locator('#controls [data-planet="0"]');
+
+  if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+    await group.locator('[data-action="toggle-planet"]').click();
+  }
+
+  await group.locator('[data-action="open-planet-dialog"]').click();
+  await expect(page.locator('[data-role="planet-dialog"][data-index="0"]')).toBeVisible();
+}
+
 test.describe('debounced regeneration (CX-017)', () => {
   test('a burst of range edits coalesces into a single regeneration', async ({ page }) => {
+    // The planet-size control moved into the dialog (CX-020); open it so the
+    // range is the visible control a real drag would operate.
+    await openSizeDialog(page);
+
     // Observe child-list changes on #preview from here on; the initial render
     // has already completed.
     await page.evaluate(() => {
@@ -54,7 +70,9 @@ test.describe('debounced regeneration (CX-017)', () => {
     });
 
     // The paired exact figure updates immediately, before the debounce fires.
-    await expect(page.locator('[data-control="planetSize"]').first()).toHaveValue('39');
+    await expect(
+      page.locator('[data-role="planet-dialog"][data-index="0"] [data-control="planetSize"]'),
+    ).toHaveValue('39');
 
     // Let the debounce fire and settle.
     await page.waitForTimeout(400);

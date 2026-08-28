@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Page } from '@playwright/test';
 
 /**
  * Iconography and compact layout (UI-002, UI-008, CD-005).
@@ -94,19 +94,26 @@ test.describe('iconography (UI-002, UI-008)', () => {
 
   test('state is never carried by an icon or colour alone', async ({ page }) => {
     // Moon enabled: exposed by the native checked state, not by the switch's
-    // appearance.
+    // appearance. The moon switch lives in the planet dialog (CX-020).
     const group = page.locator('[data-planet="0"]');
 
-    // Planet 1 opens expanded (D-211); only expand if it is not.
     if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
       await group.locator('[data-action="toggle-planet"]').click();
     }
 
-    const moon = group.locator('[data-control="moonEnabled"]');
+    await group.locator('[data-action="open-planet-dialog"]').click();
+    const dialog = page.locator('[data-role="planet-dialog"][data-index="0"]');
+    await expect(dialog).toBeVisible();
+
+    const moon = dialog.locator('[data-control="moonEnabled"]');
 
     await expect(moon).not.toBeChecked();
     await moon.check();
     await expect(moon).toBeChecked();
+
+    // The deck-only assertions below (collapse state, inline error) run with
+    // the modal dialog closed so the deck is interactive again.
+    await dialog.locator('[data-action="close-planet-dialog"]').click();
 
     // Collapsed: exposed by the native `<details>` open state.
     const collapsedState = await page

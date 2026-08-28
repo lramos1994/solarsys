@@ -53,6 +53,20 @@ async function expandAllPlanets(page: Page): Promise<void> {
 }
 
 /**
+ * Open a planet's editing dialog (CX-020), expanding the instrument first if
+ * it is collapsed — the dialog's opener lives inside the instrument body, which
+ * a collapsed group does not render.
+ */
+async function openPlanetDialog(page: Page, index: number): Promise<Locator> {
+  await expandPlanet(page, index);
+  const group = page.locator(`#controls [data-planet="${index}"]`);
+  await group.locator('[data-action="open-planet-dialog"]').click();
+  const dialog = page.locator(`[data-role="planet-dialog"][data-index="${index}"]`);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
+/**
  * Select a palette from the swatch group (CX-011).
  *
  * The radio itself is visually replaced by its swatch label, so a pointer
@@ -83,9 +97,12 @@ test.describe('control surface', () => {
   test('presents controls for every in-scope parameter', async ({ page }) => {
     await expect(page.locator('[data-control="canvasWidth"]')).toBeVisible();
     await expect(page.locator('[data-control="canvasHeight"]')).toBeVisible();
-    await expect(page.locator('[data-control="planetSize"]').first()).toBeVisible();
+    // Orbital distance stays in the deck (design §5); size and moon moved into
+    // the per-planet dialog and are reachable through its opener.
     await expect(page.locator('[data-control="planetDistance"]').first()).toBeVisible();
-    await expect(page.locator('[data-control="moonEnabled"]').first()).toBeVisible();
+    const dialog = await openPlanetDialog(page, 0);
+    await expect(dialog.locator('[data-control="planetSize"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonEnabled"]')).toBeVisible();
   });
 
   test('renders a scene without the user doing anything', async ({ page }) => {
@@ -131,7 +148,8 @@ test.describe('planet size', () => {
     const radius = page.locator('#preview [data-role="planet-body"]').first();
     const before = await radius.getAttribute('r');
 
-    await setValue(page.locator('[data-control="planetSize"]').first(), '30');
+    const dialog = await openPlanetDialog(page, 0);
+    await setValue(dialog.locator('[data-control="planetSize"]'), '30');
 
     await expect(radius).not.toHaveAttribute('r', before ?? '');
     expect(Number(await radius.getAttribute('r'))).toBe(30);
@@ -241,10 +259,10 @@ test.describe('planet composition (CTL-003)', () => {
     // Planet 2 is the default planet that has a moon.
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
 
-    // The remove affordance lives inside the instrument body, so the group
-    // must be expanded to operate it (CD-002).
-    await expandPlanet(page, 1);
-    await planets.nth(1).locator('[data-action="remove-planet"]').click();
+    // The remove affordance now lives in the planet dialog (CX-020), reached
+    // through the instrument's "Edit planet N" opener.
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-action="remove-planet"]').click();
 
     await expect(planets).toHaveCount(2);
     await expect(page.locator('#preview [data-role="orbit"]')).toHaveCount(2);
@@ -255,8 +273,8 @@ test.describe('planet composition (CTL-003)', () => {
     const planets = page.locator('#controls [data-planet]');
 
     while ((await planets.count()) > 0) {
-      await expandPlanet(page, 0);
-      await planets.first().locator('[data-action="remove-planet"]').click();
+      const dialog = await openPlanetDialog(page, 0);
+      await dialog.locator('[data-action="remove-planet"]').click();
     }
 
     await expect(planets).toHaveCount(0);
@@ -270,20 +288,20 @@ test.describe('planet composition (CTL-003)', () => {
 
 test.describe('moon configuration (CTL-004)', () => {
   test('enabling a moon reveals its controls, uses the 15-second default, and renders it', async ({ page }) => {
-    const planet = page.locator('#controls [data-planet]').first();
+    const dialog = await openPlanetDialog(page, 0);
 
     // Planet 1 starts with no moon, so moon-specific controls must not be
     // exposed until the feature is enabled.
-    await expect(planet.locator('[data-control="moonSize"]')).toHaveCount(0);
-    await expect(planet.locator('[data-control="moonDistance"]')).toHaveCount(0);
-    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonSize"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonDistance"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonPeriod"]')).toHaveCount(0);
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
 
-    await planet.locator('[data-control="moonEnabled"]').check();
+    await dialog.locator('[data-control="moonEnabled"]').check();
 
-    await expect(planet.locator('[data-control="moonSize"]')).toBeVisible();
-    await expect(planet.locator('[data-control="moonDistance"]')).toBeVisible();
-    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveValue('15');
+    await expect(dialog.locator('[data-control="moonSize"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonDistance"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonPeriod"]')).toHaveValue('15');
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(2);
     await expect(
       page.locator('#preview [data-role="planet"]').first()
@@ -292,33 +310,29 @@ test.describe('moon configuration (CTL-004)', () => {
   });
 
   test('disabling a moon hides its controls and removes it from the preview', async ({ page }) => {
-    await expandPlanet(page, 1);
-
-    const planet = page.locator('#controls [data-planet]').nth(1);
+    const dialog = await openPlanetDialog(page, 1);
 
     // Planet 2 starts with the default moon enabled.
-    await expect(planet.locator('[data-control="moonSize"]')).toBeVisible();
-    await expect(planet.locator('[data-control="moonDistance"]')).toBeVisible();
-    await expect(planet.locator('[data-control="moonPeriod"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonSize"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonDistance"]')).toBeVisible();
+    await expect(dialog.locator('[data-control="moonPeriod"]')).toBeVisible();
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
 
-    await planet.locator('[data-control="moonEnabled"]').uncheck();
+    await dialog.locator('[data-control="moonEnabled"]').uncheck();
 
-    await expect(planet.locator('[data-control="moonSize"]')).toHaveCount(0);
-    await expect(planet.locator('[data-control="moonDistance"]')).toHaveCount(0);
-    await expect(planet.locator('[data-control="moonPeriod"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonSize"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonDistance"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonPeriod"]')).toHaveCount(0);
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(0);
   });
 
   test('applies configured moon size, distance, and period to the preview', async ({ page }) => {
-    await expandPlanet(page, 1);
-
-    const planet = page.locator('#controls [data-planet]').nth(1);
+    const dialog = await openPlanetDialog(page, 1);
     const renderedPlanet = page.locator('#preview [data-role="planet"]').nth(1);
 
-    await setValue(planet.locator('[data-control="moonSize"]'), '8');
-    await setValue(planet.locator('[data-control="moonDistance"]'), '40');
-    await setValue(planet.locator('[data-control="moonPeriod"]'), '30');
+    await setValue(dialog.locator('[data-control="moonSize"]'), '8');
+    await setValue(dialog.locator('[data-control="moonDistance"]'), '40');
+    await setValue(dialog.locator('[data-control="moonPeriod"]'), '30');
 
     await expect(
       renderedPlanet.locator(':scope > [data-role="moon"] [data-role="moon-body"]'),
@@ -348,33 +362,31 @@ test.describe('ring configuration (CTL-010)', () => {
   });
 
   test('disabling a ring removes its nodes from the preview', async ({ page }) => {
-    await expandPlanet(page, 1);
+    const dialog = await openPlanetDialog(page, 1);
 
-    await page.locator('#controls [data-planet]').nth(1)
-      .locator('[data-control="ringEnabled"]').uncheck();
+    await dialog.locator('[data-control="ringEnabled"]').uncheck();
 
     await expect(page.locator('#preview [data-role="ring-back"]')).toHaveCount(0);
     await expect(page.locator('#preview [data-role="ring-front"]')).toHaveCount(0);
   });
 
   test('enabling a ring on a ringless planet applies the defaults', async ({ page }) => {
-    const planet1 = page.locator('#controls [data-planet]').first();
+    const dialog = await openPlanetDialog(page, 0);
 
-    await planet1.locator('[data-control="ringEnabled"]').check();
+    await dialog.locator('[data-control="ringEnabled"]').check();
 
-    await expect(planet1.locator('[data-control="ringType"]')).toHaveValue('Banded');
-    await expect(planet1.locator('[data-control="ringSize"]')).toHaveValue('210');
+    await expect(dialog.locator('[data-control="ringType"]')).toHaveValue('Banded');
+    await expect(dialog.locator('[data-control="ringSize"]')).toHaveValue('210');
     await expect(page.locator('#preview [data-role="ring-back"]')).toHaveCount(2);
   });
 
   test('an invalid ring size is rejected inline and keeps the scene', async ({ page }) => {
-    await expandPlanet(page, 1);
-    const planet2 = page.locator('#controls [data-planet]').nth(1);
+    const dialog = await openPlanetDialog(page, 1);
 
-    await planet2.locator('.authored-group summary').click();
+    await dialog.locator('.authored-group summary').click();
     const before = await page.locator('#preview').innerHTML();
 
-    await setValue(planet2.locator('[data-control="ringSize"]'), '999');
+    await setValue(dialog.locator('[data-control="ringSize"]'), '999');
 
     await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
     expect(await page.locator('#preview').innerHTML()).toBe(before);
@@ -430,9 +442,9 @@ test.describe('active orbit emphasis (CX-016, UI-009)', () => {
 
   test('keyboard focus provides equivalent emphasis and wins over hover', async ({ page }) => {
     await page.locator('#controls [data-planet]').first().hover();
-    await expandPlanet(page, 1);
-    await page.locator('#controls [data-planet]').nth(1)
-      .locator('[data-control="planetSize"]').focus();
+
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-control="planetSize"]').focus();
 
     const expected = await orbit(page, 1).getAttribute('d');
 
@@ -582,9 +594,8 @@ test.describe('active orbit emphasis (CX-016, UI-009)', () => {
   });
 
   test('keyboard focus on an editable control emphasizes body and moon orbit (CX-018)', async ({ page }) => {
-    await expandPlanet(page, 1);
-    await page.locator('#controls [data-planet]').nth(1)
-      .locator('[data-control="planetSize"]').focus();
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-control="planetSize"]').focus();
 
     const expected = await orbit(page, 1).getAttribute('d');
 
@@ -751,7 +762,8 @@ test.describe('generator-owned values (CTL-009)', () => {
     // Control: the fingerprint must actually observe something.
     expect(before).not.toBe('star:0:|asteroid:0:|comet:0:|ring:0:');
 
-    const planetSize = page.locator('[data-control="planetSize"]').first();
+    const dialog = await openPlanetDialog(page, 0);
+    const planetSize = dialog.locator('[data-control="planetSize"]');
     const sizeBefore = await planetSize.inputValue();
 
     await setValue(planetSize, '30');
