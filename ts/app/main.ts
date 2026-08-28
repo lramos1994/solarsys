@@ -18,7 +18,9 @@ import {
   type PlaybackState,
 } from './playback';
 import { createSceneStore } from './store';
-import type { RawSceneInput } from './validation';
+import { CANVAS_MARGIN } from '../generator/document';
+import { generatePlanetPreview } from '../generator/preview';
+import { validateScene, type RawSceneInput } from './validation';
 
 /** Scene identity is intentionally fixed until a future seed-control change. */
 const FIXED_SCENE_SEED = 20_260_826;
@@ -55,6 +57,7 @@ const CONTROL_FOR_FIELD: Record<string, string> = {
   asteroidSize: 'asteroidSize',
   asteroidPeriod: 'asteroidPeriod',
   asteroidRadiusRelation: 'asteroidOuterRadius',
+  beltType: 'beltType',
 };
 
 /**
@@ -119,6 +122,10 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `<div class="preview-surface">` +
     `<div id="preview"></div>` +
     `<svg data-role="orbit-emphasis" aria-hidden="true" focusable="false">` +
+    `<g data-role="belt-band">` +
+    `<ellipse data-role="belt-band-inner" fill="none" />` +
+    `<ellipse data-role="belt-band-outer" fill="none" />` +
+    `</g>` +
     `<path data-role="active-orbit-path" fill="none" />` +
     `<path data-role="active-moon-orbit-path" fill="none" />` +
     `<circle data-role="active-planet-highlight" fill="none" />` +
@@ -137,6 +144,9 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const overlayPath = root.querySelector<SVGPathElement>('[data-role="active-orbit-path"]');
   const moonOrbitPath = root.querySelector<SVGPathElement>('[data-role="active-moon-orbit-path"]');
   const planetHighlight = root.querySelector<SVGCircleElement>('[data-role="active-planet-highlight"]');
+  const beltBand = root.querySelector<SVGGElement>('[data-role="belt-band"]');
+  const beltBandInner = root.querySelector<SVGEllipseElement>('[data-role="belt-band-inner"]');
+  const beltBandOuter = root.querySelector<SVGEllipseElement>('[data-role="belt-band-outer"]');
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
 
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
@@ -158,6 +168,20 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   // bytes. Focus wins over hover.
   let hoveredPlanet: number | null = null;
   let focusedPlanet: number | null = null;
+
+  // Belt band emphasis (CX-019): the asteroid belt's inner/outer radii drawn
+  // as dashed ellipses. Independent of the planet emphasis; likewise app-owned
+  // chrome that never touches the stored string.
+  let hoveredBelt = false;
+  let focusedBelt = false;
+
+  // Dialog lifecycle state (CX-020, design §6): the open planet's index and
+  // its opener live here, never in the DOM, and remap on removal. `openDialog`
+  // tracks the live dialog element so a `close` event from a dialog the
+  // rebuild already destroyed is never mistaken for a user close.
+  let openDialogIndex: number | null = null;
+  let dialogOpener: Element | null = null;
+  let openDialog: HTMLDialogElement | null = null;
 
   /** Handle of the per-frame motion loop; null while no emphasis is active. */
   let orbitMotionFrame: number | null = null;
@@ -220,7 +244,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     const tick = (): void => {
       orbitMotionFrame = null;
 
-      const active = focusedPlanet ?? hoveredPlanet;
+      const active = orbitActivePlanet();
 
       if (active !== null && syncOrbitMotion(active)) {
         orbitMotionFrame = requestAnimationFrame(tick);
@@ -230,20 +254,94 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     orbitMotionFrame = requestAnimationFrame(tick);
   }
 
+  /** The planet index to emphasize, with editable-control focus winning over hover. */
+  function orbitActivePlanet(): number | null {
+    return focusedBelt ? null : (focusedPlanet ?? hoveredPlanet);
+  }
+
+  /** Whether the belt band should be drawn (focus wins over hover, CX-019). */
+  function beltEmphasisActive(): boolean {
+    return focusedBelt || (focusedPlanet === null && hoveredBelt);
+  }
+
+  /** Hide the belt band and forget its geometry. */
+  function clearBeltBand(): void {
+    if (beltBand === null) {
+      return;
+    }
+
+    beltBand.style.display = 'none';
+
+    for (const ellipse of [beltBandInner, beltBandOuter]) {
+      ellipse?.removeAttribute('cx');
+      ellipse?.removeAttribute('cy');
+      ellipse?.removeAttribute('rx');
+      ellipse?.removeAttribute('ry');
+    }
+  }
+
+  /**
+   * Draw the belt's inner and outer band as dashed ellipses derived from the
+   * authored radii. The overlay already matches the generated scene's viewBox
+   * and box, so the band is drawn in viewBox coordinates: the belt is centred
+   * on the canvas centre (offset by the document shell's content margin) with
+   * semi-axes of `canvasHalf * radiusPercent / 100`, mirroring
+   * `renderAsteroidBelt` (CX-019, geometric rather than colour-only).
+   */
+  function drawBeltBand(): void {
+    if (beltBand === null || beltBandInner === null || beltBandOuter === null) {
+      return;
+    }
+
+    const input = readControls(form!);
+    const belt = input.asteroidBelt;
+
+    if (belt === false || belt === undefined) {
+      clearBeltBand();
+      return;
+    }
+
+    const width = Number(input.canvasWidth) || 0;
+    const height = Number(input.canvasHeight) || 0;
+    const offset = CANVAS_MARGIN / 2;
+    const cx = width / 2 + offset;
+    const cy = height / 2 + offset;
+    const innerPct = Number(belt.innerRadiusPercent) || 0;
+    const outerPct = Number(belt.outerRadiusPercent) || 0;
+
+    beltBandInner.setAttribute('cx', String(cx));
+    beltBandInner.setAttribute('cy', String(cy));
+    beltBandInner.setAttribute('rx', String((width / 2) * innerPct / 100));
+    beltBandInner.setAttribute('ry', String((height / 2) * innerPct / 100));
+    beltBandOuter.setAttribute('cx', String(cx));
+    beltBandOuter.setAttribute('cy', String(cy));
+    beltBandOuter.setAttribute('rx', String((width / 2) * outerPct / 100));
+    beltBandOuter.setAttribute('ry', String((height / 2) * outerPct / 100));
+
+    beltBand.style.display = '';
+  }
+
+  /**
+   * Synchronize the emphasis overlay: the belt band when the belt is hovered or
+   * focused, otherwise the active planet's orbit (CX-016, CX-018, CX-019).
+   * Orbit and belt emphasis are mutually exclusive; focus wins over hover.
+   */
   function syncOrbitOverlay(): void {
     if (overlay === null || overlayPath === null) {
       return;
     }
 
-    const active = focusedPlanet ?? hoveredPlanet;
+    const active = orbitActivePlanet();
+    const showBelt = beltEmphasisActive();
     const generated = preview!.querySelector<SVGSVGElement>('svg');
     const orbit = active === null
       ? null
       : preview!.querySelector<SVGPathElement>(
           `path[data-role="orbit"][data-planet-index="${active}"]`,
         );
+    const orbitInactive = orbit === null || orbit.getAttribute('d') === null;
 
-    if (generated === null || orbit === null || orbit.getAttribute('d') === null) {
+    if (generated === null || (orbitInactive && !showBelt)) {
       overlay.style.display = 'none';
       overlayPath.removeAttribute('d');
       overlayPath.removeAttribute('transform');
@@ -252,6 +350,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       planetHighlight?.removeAttribute('cx');
       planetHighlight?.removeAttribute('cy');
       planetHighlight?.removeAttribute('r');
+      clearBeltBand();
       stopOrbitMotion();
       return;
     }
@@ -260,8 +359,8 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     // inherit the generated scene's CSS sizing (which is `100%` on narrow
     // screens and `calc(100vh - 224px)` on desktop). Match the scene's rendered
     // box exactly, and replay the content offset the generator wraps the scene
-    // in (translate(CANVAS_MARGIN/2, ...)) so the copied orbit lands on the same
-    // pixels as the generated one (UI-009).
+    // in (translate(CANVAS_MARGIN/2, ...)) so the copied geometry lands on the
+    // same pixels as the generated one (UI-009).
     const surface = overlay.parentElement!;
     const svgBox = generated.getBoundingClientRect();
     const surfaceBox = surface.getBoundingClientRect();
@@ -273,8 +372,25 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
     overlay.setAttribute('viewBox', generated.getAttribute('viewBox') ?? '');
     overlay.style.display = '';
-    overlayPath.setAttribute('transform', orbit.parentElement?.getAttribute('transform') ?? '');
-    overlayPath.setAttribute('d', orbit.getAttribute('d')!);
+
+    if (showBelt) {
+      // Belt emphasis: clear the orbit elements and draw the static band.
+      overlayPath.removeAttribute('d');
+      overlayPath.removeAttribute('transform');
+      moonOrbitPath?.removeAttribute('d');
+      moonOrbitPath?.removeAttribute('transform');
+      planetHighlight?.removeAttribute('cx');
+      planetHighlight?.removeAttribute('cy');
+      planetHighlight?.removeAttribute('r');
+      stopOrbitMotion();
+      drawBeltBand();
+      return;
+    }
+
+    // Orbit emphasis: clear the belt band and copy the orbit geometry.
+    clearBeltBand();
+    overlayPath.setAttribute('transform', orbit!.parentElement?.getAttribute('transform') ?? '');
+    overlayPath.setAttribute('d', orbit!.getAttribute('d')!);
 
     // Moon orbit (CX-018): copy the generated moon-orbit `d` (planet-local,
     // centred on the body) when the emphasized planet has a moon; clear it
@@ -325,13 +441,113 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     return playback === 'paused' || controlsHovered ? 'paused' : 'running';
   }
 
+  /** Resolve a planet index to its dialog element. */
+  function dialogFor(index: number): HTMLDialogElement | null {
+    return form!.querySelector<HTMLDialogElement>(
+      `[data-role="planet-dialog"][data-index="${index}"]`,
+    );
+  }
+
+  /** Resolve a planet index to its opener ("Edit planet N") button. */
+  function openerFor(index: number): Element | null {
+    return form!.querySelector(`[data-planet="${index}"] [data-action="open-planet-dialog"]`);
+  }
+
+  /**
+   * Render the isolated preview for the open dialog's planet from the current
+   * control values (GEN-020). Driven by the same validated values as the scene,
+   * so invalid input keeps the last valid preview untouched (CX-020).
+   */
+  function renderDialogPreview(): void {
+    const index = openDialogIndex;
+
+    if (index === null) {
+      return;
+    }
+
+    const dialog = dialogFor(index);
+
+    if (dialog === null) {
+      return;
+    }
+
+    const container = dialog.querySelector<HTMLElement>('[data-role="planet-preview"]');
+
+    if (container === null) {
+      return;
+    }
+
+    const state = store.getState();
+
+    if (state.seed === null) {
+      return;
+    }
+
+    const result = validateScene(withFixedSeed(readControls(form!)));
+
+    if (!result.ok || index >= result.params.planets.length) {
+      return;
+    }
+
+    container.innerHTML = generatePlanetPreview(result.params, state.seed, index);
+  }
+
+  /** A genuine user close: return focus to the opener and forget the state. */
+  function onDialogClose(event: Event): void {
+    if (event.target !== openDialog) {
+      return;
+    }
+
+    openDialogIndex = null;
+    openDialog = null;
+    const opener = dialogOpener;
+    dialogOpener = null;
+
+    if (opener !== null && opener.isConnected) {
+      (opener as HTMLElement).focus();
+    }
+  }
+
+  /** Open a planet's dialog and establish its lifecycle (showModal + preview). */
+  function showDialog(index: number): void {
+    const dialog = dialogFor(index);
+
+    if (dialog === null || dialog.open) {
+      return;
+    }
+
+    dialogOpener = openerFor(index);
+    openDialog = dialog;
+    dialog.addEventListener('close', onDialogClose);
+    dialog.showModal();
+    renderDialogPreview();
+  }
+
+  /**
+   * Re-establish the open dialog after a wholesale rebuild (design §6). The
+   * `open` attribute is a DOM artefact the rebuild destroys, so the recorded
+   * index is re-opened with `showModal()` rather than trusted from markup.
+   */
+  function restoreDialog(): void {
+    if (openDialogIndex === null) {
+      return;
+    }
+
+    showDialog(openDialogIndex);
+  }
+
   /** Re-render the form, preserving collapse state across the rebuild. */
   function rebuild(input: RawSceneControls): void {
+    // The wholesale innerHTML replacement destroys any open dialog. Drop the
+    // live reference first so a `close` event from the doomed element is not
+    // mistaken for a user close, then re-open it after the rebuild (design §6).
+    openDialog = null;
     form!.innerHTML = controlsMarkup(input, {
       collapsed: collapsedPlanets,
       ringOpen: ringOpenPlanets,
       beltOpen,
     });
+    restoreDialog();
   }
 
   function renderPlayback(): void {
@@ -411,7 +627,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
         if (ringErrorFields.has(error.field)) {
           ringOpenPlanets.add(error.index);
         }
-      } else if (error.field.startsWith('asteroid')) {
+      } else if (error.field.startsWith('asteroid') || error.field === 'beltType') {
         beltOpen = true;
       }
     }
@@ -457,6 +673,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
     renderDerived();
     renderPlayback();
+    renderDialogPreview();
   }
 
   /**
@@ -483,19 +700,32 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       const distance = scope.querySelector<HTMLElement>('[data-role="summary-distance"]');
 
       if (size !== null) {
-        size.textContent = `r${planet.size}`;
+        size.textContent = `Size ${planet.size}`;
+        size.setAttribute('title', `Planet size: ${planet.size}`);
+        size.setAttribute('aria-label', `Planet size: ${planet.size}`);
       }
 
       if (distance !== null) {
         const rawDistance = planet.distance;
-        const text =
-          typeof rawDistance === 'string'
-            ? rawDistance
-            : rawDistance.mode === 'scalar'
-              ? rawDistance.value
-              : [rawDistance.left, rawDistance.top, rawDistance.right, rawDistance.bottom].join(',');
+        let text: string;
 
-        distance.textContent = `d${text}`;
+        if (typeof rawDistance === 'string') {
+          text = rawDistance;
+        } else if (rawDistance.mode === 'scalar') {
+          text = rawDistance.value;
+        } else {
+          const extents = [
+            rawDistance.left,
+            rawDistance.top,
+            rawDistance.right,
+            rawDistance.bottom,
+          ].map(Number);
+          text = `${Math.min(...extents)}–${Math.max(...extents)}`;
+        }
+
+        distance.textContent = `Orbit ${text}`;
+        distance.setAttribute('title', `Orbital distance: ${text}`);
+        distance.setAttribute('aria-label', `Orbital distance: ${text}`);
       }
     });
 
@@ -757,19 +987,29 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   }
 
   form.addEventListener('pointerover', (event) => {
-    const group = (event.target as Element | null)?.closest?.('[data-planet]') ?? null;
+    const target = event.target as Element | null;
+    const group = target?.closest?.('[data-planet]') ?? null;
+    const belt = target?.closest?.('[data-role="asteroid-belt-group"]') ?? null;
 
     hoveredPlanet = group === null ? null : Number((group as HTMLElement).dataset.planet);
+    hoveredBelt = belt !== null;
     syncOrbitOverlay();
   });
 
   form.addEventListener('pointerout', (event) => {
-    const group = (event.target as Element | null)?.closest?.('[data-planet]') ?? null;
+    const target = event.target as Element | null;
+    const group = target?.closest?.('[data-planet]') ?? null;
+    const belt = target?.closest?.('[data-role="asteroid-belt-group"]') ?? null;
+
+    if (belt !== null) {
+      hoveredBelt = false;
+    }
 
     if (group !== null) {
       hoveredPlanet = null;
-      syncOrbitOverlay();
     }
+
+    syncOrbitOverlay();
   });
 
   form.addEventListener('focusin', (event) => {
@@ -777,9 +1017,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       return;
     }
 
-    const group = (event.target as Element).closest('[data-planet]');
+    const target = event.target as Element;
+    const group = target.closest('[data-planet]');
 
     focusedPlanet = group === null ? null : Number((group as HTMLElement).dataset.planet);
+    focusedBelt = target.closest('[data-role="asteroid-belt-group"]') !== null;
     syncOrbitOverlay();
   });
 
@@ -789,6 +1031,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     }
 
     focusedPlanet = null;
+    focusedBelt = false;
     syncOrbitOverlay();
   });
 
@@ -807,6 +1050,26 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     if (button.dataset.action === 'toggle-belt-details') {
       beltOpen = !beltOpen;
       rebuild(readControls(form));
+
+      return;
+    }
+
+    // Open/close the per-planet dialog (CX-020). Opening records the index in
+    // mountApp state and lets `showDialog` own the focus trap; closing goes
+    // through the native `close` event so focus return is handled in one place.
+    if (button.dataset.action === 'open-planet-dialog') {
+      const index = Number(button.dataset.index);
+
+      if (Number.isInteger(index)) {
+        openDialogIndex = index;
+        showDialog(index);
+      }
+
+      return;
+    }
+
+    if (button.dataset.action === 'close-planet-dialog') {
+      openDialog?.close();
 
       return;
     }
@@ -852,6 +1115,19 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
       for (const open of remappedRings) {
         ringOpenPlanets.add(open);
+      }
+
+      // Dialog state remaps by the same rule (design §6): the recorded index
+      // follows the same planet when a lower-index planet is removed, and
+      // closes when the open planet itself is removed.
+      if (openDialogIndex !== null) {
+        if (openDialogIndex === index) {
+          openDialogIndex = null;
+          openDialog = null;
+          dialogOpener = null;
+        } else if (openDialogIndex > index) {
+          openDialogIndex -= 1;
+        }
       }
     } else {
       return;
