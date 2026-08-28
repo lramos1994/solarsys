@@ -1,7 +1,9 @@
 import { describe, expect, it } from 'vitest';
+import type { AsteroidBeltConfig } from '../../ts/generator/ambient';
 import {
   BOUNDS,
   validateScene,
+  type RawAsteroidBeltConfig,
   type RawSceneInput,
 } from '../../ts/app/validation';
 
@@ -183,7 +185,7 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
     expect(BOUNDS.canvasWidth).toEqual({ min: 100, max: 1_500 });
     expect(BOUNDS.canvasHeight).toEqual({ min: 100, max: 1_500 });
     expect(BOUNDS.planetSize).toEqual({ min: 1, max: 100 });
-    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 1_200 });
+    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 400 });
     expect(BOUNDS.moonSize).toEqual({ min: 1, max: 40 });
     expect(BOUNDS.moonDistance).toEqual({ min: 0, max: 1_000 });
     expect(BOUNDS.moonPeriod).toEqual({ min: 1, max: 120 });
@@ -248,6 +250,117 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
       });
     });
   }
+});
+
+describe('belt type (CTL-012)', () => {
+  const belt = (type?: string): RawAsteroidBeltConfig => ({
+    count: '130',
+    innerRadiusPercent: '40',
+    outerRadiusPercent: '80',
+    size: '2',
+    period: '163',
+    ...(type === undefined ? {} : { type }),
+  });
+
+  function parsedBeltType(result: ReturnType<typeof validateScene>): string | undefined {
+    if (!result.ok) {
+      return undefined;
+    }
+
+    const config = result.params.asteroidBelt;
+
+    if (config === undefined || config === false) {
+      return undefined;
+    }
+
+    return (config as AsteroidBeltConfig & { type?: string }).type;
+  }
+
+  it('accepts and propagates every documented belt type', () => {
+    for (const type of ['rocky', 'icy', 'metallic'] as const) {
+      const result = validateScene(input({ asteroidBelt: belt(type) }));
+
+      expect(result.ok, `${type} accepted`).toBe(true);
+      expect(parsedBeltType(result), `${type} propagated`).toBe(type);
+    }
+  });
+
+  it('rejects an unrecognised belt type', () => {
+    const result = validateScene(input({ asteroidBelt: belt('molten') }));
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors.some((error) => error.field === 'beltType'))
+      .toBe(true);
+  });
+
+  it('defaults to rocky when the type is omitted', () => {
+    const result = validateScene(input({ asteroidBelt: belt() }));
+
+    expect(result.ok).toBe(true);
+    expect(parsedBeltType(result)).toBe('rocky');
+  });
+});
+
+describe('orbit bound (CTL-013)', () => {
+  it('caps the shared orbital distance bound at 400 in every direction', () => {
+    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 400 });
+    expect(BOUNDS.orbitLeft).toEqual({ min: 0, max: 400 });
+    expect(BOUNDS.orbitTop).toEqual({ min: 0, max: 400 });
+    expect(BOUNDS.orbitRight).toEqual({ min: 0, max: 400 });
+    expect(BOUNDS.orbitBottom).toEqual({ min: 0, max: 400 });
+  });
+
+  it('accepts the new maximum of 400', () => {
+    expect(
+      validateScene(input({ planets: [{ size: '10', distance: '400', moon: false }] })).ok,
+    ).toBe(true);
+  });
+
+  it('rejects a scalar distance above 400', () => {
+    const result = validateScene(
+      input({ planets: [{ size: '10', distance: '401', moon: false }] }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors[0]?.field).toBe('orbitDistance');
+  });
+
+  it('rejects any custom orbit extent above 400', () => {
+    for (const direction of ['left', 'top', 'right', 'bottom'] as const) {
+      const extents = {
+        left: '120',
+        top: '120',
+        right: '120',
+        bottom: '120',
+        [direction]: '401',
+      };
+      const result = validateScene(input({
+        planets: [{
+          size: '10',
+          distance: { mode: 'custom', ...extents },
+          moon: false,
+        }],
+      }));
+
+      expect(result.ok, `${direction} extent`).toBe(false);
+      expect(
+        result.ok === false && result.errors[0]?.field,
+      ).toBe(`orbit${direction.charAt(0).toUpperCase()}${direction.slice(1)}`);
+    }
+  });
+
+  it('keeps the default orbits 110/190/260 within the new bound', () => {
+    for (const distance of [110, 190, 260]) {
+      expect(distance, `${distance} within bound`).toBeLessThanOrEqual(
+        BOUNDS.orbitDistance.max,
+      );
+      expect(
+        validateScene(
+          input({ planets: [{ size: '10', distance: String(distance), moon: false }] }),
+        ).ok,
+      ).toBe(true);
+    }
+  });
 });
 
 describe('baseline invalid-input cases', () => {

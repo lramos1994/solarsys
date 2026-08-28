@@ -24,11 +24,11 @@ export const BOUNDS = {
   canvasWidth: { min: 100, max: 1_500 },
   canvasHeight: { min: 100, max: 1_500 },
   planetSize: { min: 1, max: 100 },
-  orbitDistance: { min: 0, max: 1_200 },
-  orbitLeft: { min: 0, max: 1_200 },
-  orbitTop: { min: 0, max: 1_200 },
-  orbitRight: { min: 0, max: 1_200 },
-  orbitBottom: { min: 0, max: 1_200 },
+  orbitDistance: { min: 0, max: 400 },
+  orbitLeft: { min: 0, max: 400 },
+  orbitTop: { min: 0, max: 400 },
+  orbitRight: { min: 0, max: 400 },
+  orbitBottom: { min: 0, max: 400 },
   moonSize: { min: 1, max: 40 },
   moonDistance: { min: 0, max: 1_000 },
   moonPeriod: { min: 1, max: 120 },
@@ -46,6 +46,14 @@ export type BoundedField = keyof typeof BOUNDS;
 
 /** UI-only selector value: the generator chooses a palette from the seed. */
 export const RANDOM_PALETTE = 'Random';
+
+/**
+ * Authored asteroid-belt type value set (CTL-012). `rocky` is the documented
+ * default, applied when the field is omitted.
+ */
+export const BELT_TYPES = ['rocky', 'icy', 'metallic'] as const;
+export type BeltType = (typeof BELT_TYPES)[number];
+export const DEFAULT_BELT_TYPE: BeltType = 'rocky';
 
 export interface RawMoonInput {
   size: string;
@@ -66,6 +74,8 @@ export interface RawRingConfig {
 export type RawRingInput = RawRingConfig | false;
 
 export interface RawAsteroidBeltConfig {
+  /** Authored belt character; omitted yields the documented default. */
+  type?: string;
   count: string;
   innerRadiusPercent: string;
   outerRadiusPercent: string;
@@ -97,6 +107,7 @@ export type ValidationField =
   | 'palette'
   | 'distanceForm'
   | 'ringType'
+  | 'beltType'
   | 'asteroidRadiusRelation';
 
 export interface ValidationError {
@@ -261,9 +272,19 @@ function parseRing(
 function parseAsteroidBelt(
   raw: RawAsteroidBeltInput | undefined,
   errors: ValidationError[],
-): AsteroidBeltConfig | false | undefined | null {
+): (AsteroidBeltConfig & { type: BeltType }) | false | undefined | null {
   if (raw === undefined || raw === false) {
     return raw;
+  }
+
+  const rawType = raw.type === undefined ? DEFAULT_BELT_TYPE : raw.type;
+  const type = BELT_TYPES.includes(rawType as BeltType) ? rawType as BeltType : null;
+
+  if (type === null) {
+    errors.push({
+      field: 'beltType',
+      message: `Belt type must be ${BELT_TYPES.join(', ')}.`,
+    });
   }
 
   const count = parseBounded(raw.count, 'asteroidCount', errors);
@@ -295,9 +316,10 @@ function parseAsteroidBelt(
     outerRadiusPercent === null ||
     size === null ||
     period === null ||
+    type === null ||
     invalidRelation
     ? null
-    : { count, innerRadiusPercent, outerRadiusPercent, size, period };
+    : { type, count, innerRadiusPercent, outerRadiusPercent, size, period };
 }
 
 export function validateScene(input: RawSceneInput): ValidationResult {
