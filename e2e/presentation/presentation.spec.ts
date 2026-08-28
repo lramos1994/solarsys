@@ -447,10 +447,13 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     const expected = {
       canvasWidth: { min: '100', max: '1500' },
       canvasHeight: { min: '100', max: '1500' },
+      // CTL-013: orbital distance is capped at 400 in the UI, mirroring the
+      // generator's authored bound; the slider reads it from the same BOUNDS.
+      planetDistance: { min: '0', max: '400' },
     };
 
     for (const [control, bounds] of Object.entries(expected)) {
-      const input = page.locator(`[data-control="${control}"]`);
+      const input = page.locator(`[data-control="${control}"]`).first();
 
       await expect(input).toHaveAttribute('type', 'number');
       await expect(input).toHaveAttribute('min', bounds.min);
@@ -698,5 +701,174 @@ test.describe('contrast (UI-006)', () => {
     const { text, background } = await textAndBackground(page, '.pane-heading > p:last-child');
 
     expect(contrastRatio(text, background)).toBeGreaterThanOrEqual(3);
+  });
+});
+
+test.describe('belt row presentation (UI-011)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('the belt row treatment is distinct from a planet summary row', async ({ page }) => {
+    const belt = page.locator('.belt-row');
+    const planetSummary = page.locator('#controls [data-planet="0"] > summary').first();
+
+    await expect(belt).toBeVisible();
+    await expect(planetSummary).toBeVisible();
+
+    const beltBorder = await belt.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { style: style.borderLeftStyle, width: style.borderLeftWidth };
+    });
+    const planetBorder = await planetSummary.evaluate((node) => {
+      const style = getComputedStyle(node);
+      return { style: style.borderLeftStyle, width: style.borderLeftWidth };
+    });
+
+    // The belt row borrows the dashed band language; a planet summary row has
+    // no left border at all.
+    expect(beltBorder.style).toBe('dashed');
+    expect(beltBorder.width).not.toBe('0px');
+    expect(planetBorder.style).not.toBe('dashed');
+  });
+
+  test('the belt type options are readable as text', async ({ page }) => {
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+
+    const options = await page
+      .locator('[data-control="beltType"] option')
+      .allTextContents();
+
+    expect(options).toEqual(['rocky', 'icy', 'metallic']);
+    expect(options.every((name) => name.trim().length > 0)).toBe(true);
+  });
+
+  test('the belt row resolves its colours through the token set', async ({ page }) => {
+    const colours = await page.evaluate(() => {
+      const root = getComputedStyle(document.documentElement);
+      const row = document.querySelector<HTMLElement>('.belt-row');
+
+      if (row === null) {
+        return null;
+      }
+
+      // A probe resolves the declared token the same way the engine resolves
+      // the row, so the comparison is immune to colour-space formatting.
+      const probe = document.createElement('div');
+      probe.style.borderLeftColor = 'var(--chrome-status)';
+      document.body.appendChild(probe);
+      const token = getComputedStyle(probe).borderLeftColor;
+      probe.remove();
+
+      return {
+        row: getComputedStyle(row).borderLeftColor,
+        token,
+        background: getComputedStyle(row).backgroundImage,
+      };
+    });
+
+    expect(colours).not.toBeNull();
+    expect(colours!.row).toBe(colours!.token);
+    expect(colours!.background).toContain('gradient');
+  });
+
+  test('hovering the belt row changes its computed treatment', async ({ page }) => {
+    const row = page.locator('.belt-row');
+    await expect(row).toBeVisible();
+
+    const before = await row.evaluate((node) => {
+      const style = getComputedStyle(node);
+
+      return { border: style.borderLeftColor, background: style.backgroundImage };
+    });
+
+    await row.hover();
+
+    const after = await row.evaluate((node) => {
+      const style = getComputedStyle(node);
+
+      return { border: style.borderLeftColor, background: style.backgroundImage };
+    });
+
+    expect(after.border).not.toBe(before.border);
+    expect(after.background).not.toBe(before.background);
+  });
+});
+
+test.describe('planet dialog presentation (UI-012)', () => {
+  test.beforeEach(async ({ page }) => {
+    await page.goto('/');
+    await expect(page.locator('#preview svg')).toBeVisible();
+  });
+
+  test('the dialog surface and backdrop resolve through the tokens', async ({ page }) => {
+    const dialog = await openPlanetDialog(page, 0);
+
+    const colours = await dialog.evaluate((node) => {
+      const probe = (property: string): string => {
+        const element = document.createElement('div');
+        element.style.background = `var(${property})`;
+        document.body.appendChild(element);
+        const value = getComputedStyle(element).backgroundColor;
+        element.remove();
+        return value;
+      };
+
+      return {
+        surface: getComputedStyle(node).backgroundColor,
+        surfaceToken: probe('--chrome-control'),
+        backdrop: getComputedStyle(node, '::backdrop').backgroundColor,
+        backdropToken: probe('--chrome-backdrop'),
+      };
+    });
+
+    expect(colours.surface).toBe(colours.surfaceToken);
+    expect(colours.backdrop).toBe(colours.backdropToken);
+    expect(colours.backdrop).not.toBe('rgba(0, 0, 0, 0)');
+  });
+
+  test('no application rule restyles a generated preview descendant', async ({ page }) => {
+    const offending = await page.evaluate(() => {
+      const selectors: string[] = [];
+
+      for (const sheet of Array.from(document.styleSheets)) {
+        let rules: CSSRule[] = [];
+
+        try {
+          rules = Array.from(sheet.cssRules);
+        } catch {
+          continue;
+        }
+
+        for (const rule of rules) {
+          if (!(rule instanceof CSSStyleRule)) {
+            continue;
+          }
+
+          for (const selector of rule.selectorText.split(',')) {
+            const trimmed = selector.trim();
+
+            // The only permitted chrome selectors into #preview are the
+            // container itself and the root SVG sizing rule (CLAUDE.md
+            // invariant); anything that names a generated descendant
+            // restyles the scene.
+            if (!trimmed.includes('#preview')) {
+              continue;
+            }
+
+            const tail = trimmed.split('#preview')[1] ?? '';
+
+            if (!/^\s*((>\s*)?svg)?\s*$/.test(tail)) {
+              selectors.push(trimmed);
+            }
+          }
+        }
+      }
+
+      return selectors;
+    });
+
+    expect(offending).toEqual([]);
   });
 });
