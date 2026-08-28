@@ -88,7 +88,19 @@ test.describe('playback control', () => {
 
     await page.locator('[data-action="toggle-playback"]').click(); // pause
 
-    const size = page.locator('[data-control="planetSize"]').first();
+    // Size now lives in the planet dialog (CX-020); edit it there so the
+    // regeneration goes through the same validated submit path.
+    const group = page.locator('#controls [data-planet="0"]');
+
+    if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
+      await group.locator('[data-action="toggle-planet"]').click();
+    }
+
+    await group.locator('[data-action="open-planet-dialog"]').click();
+    const dialog = page.locator('[data-role="planet-dialog"][data-index="0"]');
+    await expect(dialog).toBeVisible();
+
+    const size = dialog.locator('[data-control="planetSize"]');
     await size.fill('60');
     await size.blur();
     await expect(page.locator('#preview [data-role="planet-body"]').first()).toHaveAttribute('r', '60');

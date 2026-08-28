@@ -490,6 +490,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     }
 
     container.innerHTML = generatePlanetPreview(result.params, state.seed, index);
+    // The isolated preview carries the same SMIL as the scene, so it obeys the
+    // same playback rule (UI-012): under an active reduced-motion preference it
+    // starts paused. Defer one frame, like the main scene, so the pause lands
+    // on the resolved animateMotion mpath rather than the base position.
+    requestAnimationFrame(() => applyPlayback(container, effectivePlayback()));
   }
 
   /** A genuine user close: return focus to the opener and forget the state. */
@@ -1140,9 +1145,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     submit();
 
     // Focus management (CX-006): the form was just rebuilt, so re-query fresh
-    // nodes in the next frame. On add, land on the new card's first control;
-    // on remove, land on the group that shifted into the removed slot, or the
-    // add button when none remain.
+    // nodes in the next frame. On add, land on the new card's editing entry
+    // point — the dialog opener, since size/moon/ring moved into the dialog and
+    // a control inside a closed `<dialog>` is not rendered and cannot take
+    // focus. On remove, land on the group that shifted into the removed slot,
+    // or the add button when none remain.
     //
     // A control inside a COLLAPSED `<details>` is not rendered and therefore
     // cannot take focus, so on remove the target is the disclosure summary of
@@ -1153,7 +1160,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     const removedIndex = Number(button.dataset.index);
     const focusSelector =
       button.dataset.action === 'add-planet'
-        ? `[data-planet="${addedIndex}"] [data-control="planetSize"]`
+        ? `[data-planet="${addedIndex}"] [data-action="open-planet-dialog"]`
         : `[data-planet="${removedIndex}"] [data-action="toggle-planet"]`;
 
     requestAnimationFrame(() => {

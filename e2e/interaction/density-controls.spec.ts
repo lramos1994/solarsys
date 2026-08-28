@@ -44,6 +44,18 @@ async function collapse(page: Page, index: number): Promise<void> {
   }
 }
 
+/**
+ * Open a planet's editing dialog (CX-020), expanding the instrument first if
+ * collapsed — the dialog opener lives in the instrument body.
+ */
+async function openPlanetDialog(page: Page, index: number): Promise<Locator> {
+  await expand(page, index);
+  await group(page, index).locator('[data-action="open-planet-dialog"]').click();
+  const dialog = page.locator(`[data-role="planet-dialog"][data-index="${index}"]`);
+  await expect(dialog).toBeVisible();
+  return dialog;
+}
+
 /** The serialized preview, used to prove a gesture changed nothing. */
 async function previewMarkup(page: Page): Promise<string> {
   return page.locator('#preview').innerHTML();
@@ -125,13 +137,14 @@ test.describe('collapsible instruments (CD-002)', () => {
 
     // Editing an expanded planet re-reads the whole form. A collapsed group
     // whose values were dropped would silently lose its planet here.
-    await setValue(group(page, 0).locator('[data-control="planetSize"]'), '20');
+    const dialog = await openPlanetDialog(page, 0);
+    await setValue(dialog.locator('[data-control="planetSize"]'), '20');
 
     await expect(page.locator('#preview [data-role="orbit"]')).toHaveCount(3);
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(1);
   });
 
-  test('a collapsed group keeps its identity and its remove affordance', async ({
+  test('a collapsed group keeps its identity and its edit entry point', async ({
     page,
   }) => {
     const collapsed = group(page, 1);
@@ -139,7 +152,12 @@ test.describe('collapsible instruments (CD-002)', () => {
     expect(await isOpen(collapsed)).toBe(false);
     await expect(collapsed).toHaveAttribute('data-planet', '1');
     await expect(collapsed.locator('.summary-title')).toContainText('Planet 2');
-    await expect(collapsed.locator('[data-action="remove-planet"]')).toHaveCount(1);
+    // The remove affordance moved into the dialog (CX-020), reached through the
+    // instrument's "Edit planet N" opener.
+    await expect(collapsed.locator('[data-action="open-planet-dialog"]')).toHaveCount(1);
+    await expect(
+      collapsed.locator('[data-role="planet-dialog"] [data-action="remove-planet"]'),
+    ).toHaveCount(1);
   });
 
   test('collapse state survives a form rebuild', async ({ page }) => {
@@ -148,7 +166,8 @@ test.describe('collapsible instruments (CD-002)', () => {
     await collapse(page, 0);
     await expand(page, 1);
 
-    await group(page, 1).locator('[data-control="moonEnabled"]').uncheck();
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-control="moonEnabled"]').uncheck();
 
     expect(await isOpen(group(page, 0))).toBe(false);
     expect(await isOpen(group(page, 1))).toBe(true);
@@ -166,7 +185,8 @@ test.describe('collapsible instruments (CD-002)', () => {
       .locator('[data-control="planetDistance"]')
       .inputValue();
 
-    await group(page, 1).locator('[data-action="remove-planet"]').click();
+    const dialog = await openPlanetDialog(page, 1);
+    await dialog.locator('[data-action="remove-planet"]').click();
 
     await expect(page.locator('#controls [data-planet]')).toHaveCount(2);
 
@@ -193,11 +213,24 @@ test.describe('collapsed summary (CD-003)', () => {
   });
 
   test('the summary reflects an edited value', async ({ page }) => {
-    await expand(page, 1);
-    await setValue(group(page, 1).locator('[data-control="planetSize"]'), '42');
+    const dialog = await openPlanetDialog(page, 1);
+    await setValue(dialog.locator('[data-control="planetSize"]'), '42');
+    await dialog.locator('[data-action="close-planet-dialog"]').click();
     await collapse(page, 1);
 
     await expect(group(page, 1).locator('[data-role="summary-size"]')).toContainText('42');
+  });
+
+  test('an abbreviated value carries an accessible description (CX-021)', async ({ page }) => {
+    const size = group(page, 1).locator('[data-role="summary-size"]');
+    const distance = group(page, 1).locator('[data-role="summary-distance"]');
+
+    // The compact visible form ("Size 18") is paired with a full sentence for
+    // assistive technology, not a bare r<num>/d<num> code.
+    await expect(size).toHaveAttribute('aria-label', /planet size/i);
+    await expect(size).toHaveAttribute('title', /planet size/i);
+    await expect(distance).toHaveAttribute('aria-label', /orbital distance/i);
+    await expect(distance).toHaveAttribute('title', /orbital distance/i);
   });
 
   test('moon presence is announced, not merely coloured', async ({ page }) => {
@@ -213,60 +246,54 @@ test.describe('collapsed summary (CD-003)', () => {
 
 test.describe('an error never hides inside a collapsed group (CD-004)', () => {
   test('a rejection keeps its group expanded across a form rebuild', async ({ page }) => {
-    // A user cannot type into a closed group — its contents are not rendered.
-    // The reachable way an error would end up inside a collapsed group is a
-    // wholesale form rebuild (add planet, new seed) while the error stands:
-    // the rebuild reads collapse state, so without the auto-expansion the
-    // message would be re-rendered inside a closed group.
-    await expand(page, 1);
-
-    const size = group(page, 1).locator('[data-control="planetSize"]');
+    // A user edits the planet's size in its dialog; the erroring group must
+    // refuse to collapse, and the inline error must survive a rebuild.
+    const dialog = await openPlanetDialog(page, 1);
+    const size = dialog.locator('[data-control="planetSize"]');
 
     await setValue(size, '9999');
     await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
 
+    await dialog.locator('[data-action="close-planet-dialog"]').click();
     await collapse(page, 1);
 
-    // The group refuses to close while it holds an error, and its message
-    // stays visible and associated.
+    // The group refuses to close while it holds an error (CD-004).
     expect(await isOpen(group(page, 1))).toBe(true);
 
     await page.locator('[data-action="add-planet"]').click();
 
     expect(await isOpen(group(page, 1))).toBe(true);
 
-    const message = group(page, 1).locator('#planet-1-size-error');
-
-    await expect(message).toBeVisible();
-    await expect(group(page, 1).locator('[data-control="planetSize"]')).toHaveAttribute(
+    // The inline error stays associated with the dialog's size control across
+    // the rebuild.
+    const reopened = await openPlanetDialog(page, 1);
+    await expect(reopened.locator('[data-control="planetSize"]')).toHaveAttribute(
       'aria-invalid',
       'true',
     );
-    await expect(group(page, 1).locator('[data-control="planetSize"]')).toHaveAttribute(
+    await expect(reopened.locator('[data-control="planetSize"]')).toHaveAttribute(
       'aria-describedby',
       'planet-1-size-error',
     );
+    await expect(reopened.locator('#planet-1-size-error')).toBeVisible();
   });
 
   test('the last valid scene survives a rejection in a group', async ({ page }) => {
-    await expand(page, 1);
-
     const before = await previewMarkup(page);
-    const size = group(page, 1).locator('[data-control="planetSize"]');
+    const dialog = await openPlanetDialog(page, 1);
 
-    await setValue(size, '9999');
+    await setValue(dialog.locator('[data-control="planetSize"]'), '9999');
 
     expect(await previewMarkup(page)).toBe(before);
   });
 
   test('a group holding an error refuses to collapse', async ({ page }) => {
-    await expand(page, 1);
+    const dialog = await openPlanetDialog(page, 1);
 
-    const size = group(page, 1).locator('[data-control="planetSize"]');
-
-    await setValue(size, '9999');
+    await setValue(dialog.locator('[data-control="planetSize"]'), '9999');
     await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
 
+    await dialog.locator('[data-action="close-planet-dialog"]').click();
     await toggle(page, 1);
 
     expect(await isOpen(group(page, 1))).toBe(true);
@@ -366,12 +393,12 @@ test.describe('paired range and exact entry (CX-001)', () => {
   });
 
   test('every moon magnitude has a visible, usable range control', async ({ page }) => {
-    await expand(page, 1);
+    const dialog = await openPlanetDialog(page, 1);
 
     for (const control of ['moonSize', 'moonDistance', 'moonPeriod'] as const) {
-      const numeric = group(page, 1).locator(`[data-control="${control}"]`);
+      const numeric = dialog.locator(`[data-control="${control}"]`);
       const id = await numeric.getAttribute('id');
-      const range = group(page, 1).locator(`[data-range-for="${id}"]`);
+      const range = dialog.locator(`[data-range-for="${id}"]`);
 
       await expect(range).toBeVisible();
       const box = await range.boundingBox();
@@ -381,12 +408,11 @@ test.describe('paired range and exact entry (CX-001)', () => {
   });
 
   test('moon ranges synchronize their exact values and regenerate the preview', async ({ page }) => {
-    await expand(page, 1);
+    const dialog = await openPlanetDialog(page, 1);
 
-    const planet = group(page, 1);
-    const size = planet.locator('[data-control="moonSize"]');
+    const size = dialog.locator('[data-control="moonSize"]');
     const sizeId = await size.getAttribute('id');
-    const sizeRange = planet.locator(`[data-range-for="${sizeId}"]`);
+    const sizeRange = dialog.locator(`[data-range-for="${sizeId}"]`);
     const moonBody = page.locator('#preview [data-role="planet"]').nth(1)
       .locator(':scope > [data-role="moon"] [data-role="moon-body"]');
 
@@ -394,9 +420,9 @@ test.describe('paired range and exact entry (CX-001)', () => {
     await expect(size).toHaveValue('8');
     await expect(moonBody).toHaveAttribute('r', '8');
 
-    const period = planet.locator('[data-control="moonPeriod"]');
+    const period = dialog.locator('[data-control="moonPeriod"]');
     const periodId = await period.getAttribute('id');
-    const periodRange = planet.locator(`[data-range-for="${periodId}"]`);
+    const periodRange = dialog.locator(`[data-range-for="${periodId}"]`);
 
     await setValue(period, '30');
     await expect(periodRange).toHaveValue('30');
@@ -446,31 +472,31 @@ test.describe('canvas dimension presets (CX-010)', () => {
 
 test.describe('moon switch (CX-012)', () => {
   test('the switch exposes its state and keeps its hook', async ({ page }) => {
-    await expand(page, 1);
+    const dialog = await openPlanetDialog(page, 1);
 
-    const toggleControl = group(page, 1).locator('[data-control="moonEnabled"]');
+    const toggleControl = dialog.locator('[data-control="moonEnabled"]');
 
     await expect(toggleControl).toBeChecked();
 
     await toggleControl.uncheck();
 
     await expect(toggleControl).not.toBeChecked();
-    await expect(group(page, 1).locator('[data-control="moonSize"]')).toHaveCount(0);
+    await expect(dialog.locator('[data-control="moonSize"]')).toHaveCount(0);
   });
 
   test('the switch is keyboard-operable and applies the defaults', async ({ page }) => {
-    await expand(page, 0);
+    const dialog = await openPlanetDialog(page, 0);
 
-    const toggleControl = group(page, 0).locator('[data-control="moonEnabled"]');
+    const toggleControl = dialog.locator('[data-control="moonEnabled"]');
 
     await expect(toggleControl).not.toBeChecked();
 
     await toggleControl.focus();
     await page.keyboard.press('Space');
 
-    await expect(group(page, 0).locator('[data-control="moonSize"]')).toHaveValue('5');
-    await expect(group(page, 0).locator('[data-control="moonDistance"]')).toHaveValue('32');
-    await expect(group(page, 0).locator('[data-control="moonPeriod"]')).toHaveValue('15');
+    await expect(dialog.locator('[data-control="moonSize"]')).toHaveValue('5');
+    await expect(dialog.locator('[data-control="moonDistance"]')).toHaveValue('32');
+    await expect(dialog.locator('[data-control="moonPeriod"]')).toHaveValue('15');
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(2);
   });
 });
