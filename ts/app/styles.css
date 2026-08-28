@@ -25,6 +25,8 @@
   --chrome-line-strong: #50616e;
   --chrome-text: #e8eef2;
   --chrome-text-muted: #aebbc5;
+  /* overlay role: the modal backdrop behind an open dialog */
+  --chrome-backdrop: rgba(7, 11, 16, 0.72);
 
   /* compatibility aliases retained for established presentation contracts */
   --bg: var(--chrome-page-bg);
@@ -778,6 +780,27 @@ input[aria-invalid="true"] {
   .summary-marker {
     transition: transform 120ms ease;
   }
+
+  .planet-dialog[open] {
+    animation: planet-dialog-in 140ms ease-out;
+  }
+
+  .planet-dialog[open]::backdrop {
+    animation: planet-dialog-backdrop-in 140ms ease-out;
+  }
+}
+
+@keyframes planet-dialog-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+
+@keyframes planet-dialog-backdrop-in {
+  from {
+    opacity: 0;
+  }
 }
 
 /* -------------------------------------------------------- orbit emphasis */
@@ -930,6 +953,114 @@ input[aria-invalid="true"] {
   width: 3.75rem;
 }
 
+/* -------------------------------------------------- planet editing dialog */
+
+/* UI-012: the per-planet editing surface in the observatory language.
+   Native <dialog> supplies modality, backdrop, Escape, and inertness
+   (CX-020); this file only gives it the chrome. The surface is the raised
+   control tone, the preview sits in the preview well, and the only rule
+   that reaches into the generated preview is the root SVG sizing rule
+   below. */
+.planet-dialog {
+  width: min(26rem, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: 0;
+  border: 1px solid var(--chrome-line-strong);
+  border-top: 2px solid var(--chrome-primary-action);
+  border-radius: var(--radius-lg);
+  background: var(--chrome-control);
+  color: var(--chrome-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.planet-dialog::backdrop {
+  background: var(--chrome-backdrop);
+}
+
+.dialog-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-bottom: 1px solid var(--chrome-line);
+}
+
+.dialog-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.dialog-title .icon {
+  color: var(--chrome-primary-action);
+}
+
+.dialog-close {
+  background: transparent;
+  border-color: transparent;
+  color: var(--chrome-text-muted);
+}
+
+.dialog-close:hover {
+  color: var(--chrome-text);
+  border-color: var(--chrome-line-strong);
+}
+
+.dialog-preview {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 96px;
+  padding: var(--space-3);
+  border-bottom: 1px solid var(--chrome-line);
+  background: var(--chrome-preview-well);
+}
+
+/* The isolated preview scales to its container — the permitted root SVG
+   sizing rule (UI-012). Nothing below targets a generated descendant. */
+.dialog-preview > svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
+  max-height: 200px;
+}
+
+.dialog-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-4);
+}
+
+.dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4) var(--space-3);
+  border-top: 1px solid var(--chrome-line);
+}
+
+/* Inside the dialog footer the remove action is a real button again, not
+   the deck's quiet text link. */
+.dialog-actions button[data-action="remove-planet"] {
+  padding-left: var(--space-3);
+  padding-right: var(--space-3);
+}
+
+/* The dialog's entry point reads as an outlined action, like add/download. */
+button[data-action="open-planet-dialog"] {
+  margin-top: var(--space-2);
+  border-color: var(--chrome-primary-action);
+  color: var(--chrome-primary-action);
+}
+
 /* --------------------------------------------------------- belt group */
 
 .belt-group {
@@ -937,18 +1068,32 @@ input[aria-invalid="true"] {
   padding: 0;
 }
 
+/* UI-011: the belt row is its own instrument, not a planet summary row.
+   The dashed left border borrows the band language of the belt emphasis
+   (CX-019), the status tone marks it as the secondary field instrument,
+   and hover brightens the border and tint — the affordance that pairs
+   with the belt-band emphasis. Every colour here resolves through a
+   token or a concrete rgba of a token hue. */
 .belt-row {
   display: flex;
   align-items: center;
   gap: var(--space-2);
   min-height: 24px;
+  padding: var(--space-1) var(--space-2);
+  border-left: 2px dashed var(--chrome-status);
+  background: linear-gradient(90deg, rgba(169, 223, 201, 0.055), transparent 70%);
+}
+
+.belt-row:hover {
+  border-left-color: var(--chrome-primary-action);
+  background: linear-gradient(90deg, rgba(169, 223, 201, 0.13), transparent 70%);
 }
 
 .belt-row label {
   margin: 0;
   font-size: 0.75rem;
   font-weight: 600;
-  color: var(--chrome-text-muted);
+  color: var(--chrome-status);
   cursor: pointer;
 }
 
@@ -959,9 +1104,13 @@ input[aria-invalid="true"] {
   min-height: 24px;
   border: 0;
   background: transparent;
-  color: var(--chrome-text-muted);
+  color: var(--chrome-status);
   font-size: 0.8rem;
   cursor: pointer;
+}
+
+.belt-chevron:hover {
+  color: var(--chrome-primary-action);
 }
 
 .belt-body {
