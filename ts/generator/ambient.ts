@@ -167,20 +167,84 @@ export function renderBackground(
 /** Asteroid count, preserved from the baseline. */
 const BELT_COUNT = 130;
 
+/** The authored belt types (GEN-019, CTL-012). */
+export const BELT_TYPES = ['rocky', 'icy', 'metallic'] as const;
+export type BeltType = (typeof BELT_TYPES)[number];
+
+/**
+ * Default applied when a direct generator caller omits the type, chosen so the
+ * legacy path keeps the baseline's rock character (design §3).
+ */
+export const DEFAULT_BELT_TYPE: BeltType = 'rocky';
+
+/**
+ * Per-type rock silhouettes. Each set holds more than two symbols so a belt
+ * reads as a field of distinct bodies rather than two repeated stamps
+ * (GEN-019). Points are unit-scale: the per-rock `scale()` sizes them.
+ *
+ * The first two rocky shapes are the baseline pair, preserved so the default
+ * type keeps its familiar character.
+ */
+export const BELT_SHAPES: Record<BeltType, readonly string[]> = {
+  rocky: [
+    '0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8',
+    '0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7',
+    '0.95,-0.15 0.45,0.55 -0.25,0.9 -0.85,0.15 -0.55,-0.65 0.2,-0.85',
+    '0.7,0.35 -0.05,0.8 -0.75,0.45 -0.9,-0.35 -0.15,-0.9 0.6,-0.5',
+  ],
+  icy: [
+    '1,0 0.2,0.45 -0.35,0.95 -0.55,0.2 -0.95,-0.35 -0.2,-0.5 0.35,-0.95',
+    '0.55,0.15 0.15,1 -0.3,0.35 -1,0.1 -0.35,-0.4 0.1,-0.95 0.5,-0.35',
+    '0.85,-0.35 0.4,0.25 0.6,0.8 -0.2,0.6 -0.8,0.85 -0.6,0.05 -0.9,-0.55 -0.1,-0.4',
+    '0.9,0.45 0.05,0.55 -0.45,1 -0.55,0.25 -1,-0.2 -0.3,-0.6 0.35,-0.9 0.45,-0.2',
+  ],
+  metallic: [
+    '0.85,-0.5 0.85,0.5 0,0.9 -0.85,0.5 -0.85,-0.5 0,-0.9',
+    '0.75,-0.75 0.9,0.2 0.2,0.9 -0.75,0.75 -0.9,-0.2 -0.2,-0.9',
+    '0.9,-0.25 0.65,0.65 -0.25,0.9 -0.9,0.25 -0.65,-0.65 0.25,-0.9',
+    '0.7,-0.7 0.7,0.7 -0.7,0.7 -0.7,-0.7',
+  ],
+};
+
 export interface AsteroidBeltConfig {
   count: number;
   innerRadiusPercent: number;
   outerRadiusPercent: number;
   size: number;
   period: number;
+  /** Omitted applies `DEFAULT_BELT_TYPE`, keeping the legacy rock character. */
+  type?: BeltType;
 }
 
-/** Derive the belt's rock tones from the palette (baseline `Theme::asteroid`). */
-function asteroidColors(palette: Palette): { fill: string; stroke: string } {
+/**
+ * Derive the belt's rock tones from the palette (baseline `Theme::asteroid`),
+ * then bias them by belt type.
+ *
+ * The palette stays the source of hue, so palettes and belt types compose
+ * (design §3): the type only shifts the derived rock, it never replaces it.
+ */
+function asteroidColors(
+  palette: Palette,
+  type: BeltType = DEFAULT_BELT_TYPE,
+): { fill: string; stroke: string } {
   const rock = shade(
     mix(palette.planetHues[0], palette.stars[palette.stars.length - 1]!, 0.5),
     0.12,
   );
+
+  if (type === 'icy') {
+    // Pale and cold: pulled toward the palette's mid star tone and lifted.
+    const ice = tint(mix(rock, palette.stars[1], 0.55), 0.15);
+
+    return { fill: ice, stroke: shade(ice, 0.35) };
+  }
+
+  if (type === 'metallic') {
+    // Desaturated and darker, with a lighter specular edge.
+    const metal = shade(mix(rock, shade(palette.stars[0], 0.4), 0.6), 0.08);
+
+    return { fill: metal, stroke: tint(metal, 0.3) };
+  }
 
   return { fill: rock, stroke: shade(rock, 0.45) };
 }
@@ -200,10 +264,11 @@ export function renderAsteroidBelt(
   const cy = canvas.height / 2;
   const rx = canvas.width * 0.42;
   const ry = canvas.height * 0.42;
-  const colors = asteroidColors(palette);
+  const type = config?.type ?? DEFAULT_BELT_TYPE;
+  const colors = asteroidColors(palette, type);
 
-  const shapeA = ids.next('asteroid-a');
-  const shapeB = ids.next('asteroid-b');
+  const shapes = BELT_SHAPES[type];
+  const shapeIds = shapes.map(() => ids.next('asteroid'));
 
   let bodies = '';
 
@@ -232,7 +297,9 @@ export function renderAsteroidBelt(
       y = round(cy + Math.sin(angle) * cy * radialPercent / 100);
       scale = round(config.size * randomInt(random, 55, 130) / 100);
     }
-    const symbol = randomInt(random, 0, 1) === 1 ? shapeA : shapeB;
+    // Exactly one draw selects the symbol, whatever the shape set's size, so
+    // the number of PRNG draws per rock never varies with belt type (GEN-019).
+    const symbol = shapeIds[randomInt(random, 0, shapeIds.length - 1)]!;
     const rotation = randomInt(random, 0, 360);
     const opacity = randomInt(random, 75, 100) / 100;
 
@@ -247,8 +314,9 @@ export function renderAsteroidBelt(
 
   return (
     `<defs>` +
-    `<polygon id="${shapeA}" points="0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8"/>` +
-    `<polygon id="${shapeB}" points="0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7"/>` +
+    shapes
+      .map((points, index) => `<polygon id="${shapeIds[index]}" points="${points}"/>`)
+      .join('') +
     `</defs>` +
     `<g data-role="asteroid-belt">` +
     `<animateTransform attributeName="transform" type="rotate"` +
