@@ -1,3 +1,6 @@
 node_modules/
 build/
 e2e/.artifacts/
+
+# kanban worker worktrees
+.worktrees/

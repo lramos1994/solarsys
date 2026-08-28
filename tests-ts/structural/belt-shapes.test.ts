@@ -5,6 +5,7 @@ import { createIdGenerator } from '../../ts/generator/ids';
 import { createPrng } from '../../ts/generator/prng';
 import { paletteByName } from '../../ts/generator/palette';
 import {
+  BELT_SHAPES,
   BELT_TYPES,
   renderAsteroidBelt,
   type AsteroidBeltConfig,
@@ -62,6 +63,31 @@ function asteroids(markup: string): Element[] {
   return [...parse(markup).querySelectorAll('use[data-role="asteroid"]')];
 }
 
+/** The emitted silhouette GEOMETRY, keyed by symbol id. */
+function symbolGeometry(markup: string): Map<string, string> {
+  const geometry = new Map<string, string>();
+
+  for (const polygon of parse(markup).querySelectorAll('defs polygon[id]')) {
+    geometry.set(
+      polygon.getAttribute('id') as string,
+      polygon.getAttribute('points') as string,
+    );
+  }
+
+  return geometry;
+}
+
+/** The silhouette geometry actually referenced by each rendered rock. */
+function renderedGeometry(markup: string): string[] {
+  const geometry = symbolGeometry(markup);
+
+  return asteroids(markup).map((rock) => {
+    const href = (rock.getAttribute('href') ?? '').replace(/^#/, '');
+
+    return geometry.get(href) as string;
+  });
+}
+
 describe('belt shape sets', () => {
   it('exposes the three authored belt types', () => {
     expect([...BELT_TYPES]).toEqual(['rocky', 'icy', 'metallic']);
@@ -99,6 +125,44 @@ describe('belt shape sets', () => {
       expect(used.size).toBe(symbolIds(markup).length);
     });
   }
+});
+
+describe('belt shape GEOMETRY differs by type', () => {
+  for (const type of ['rocky', 'icy', 'metallic'] as const) {
+    it(`emits exactly the authored ${type} silhouettes`, () => {
+      expect([...symbolGeometry(belt({ type })).values()]).toEqual([
+        ...BELT_SHAPES[type],
+      ]);
+    });
+  }
+
+  it('shares no silhouette between any two belt types', () => {
+    const points = (type: BeltType): Set<string> =>
+      new Set(symbolGeometry(belt({ type })).values());
+
+    const rocky = points('rocky');
+    const icy = points('icy');
+    const metallic = points('metallic');
+
+    for (const [left, right, label] of [
+      [rocky, icy, 'rocky/icy'],
+      [rocky, metallic, 'rocky/metallic'],
+      [icy, metallic, 'icy/metallic'],
+    ] as const) {
+      expect([...left].filter((shape) => right.has(shape)), label).toEqual([]);
+    }
+  });
+
+  it('renders each rock with its own type silhouette across a populous belt', () => {
+    const rocky = renderedGeometry(belt({ type: 'rocky', count: 300 }));
+    const icy = renderedGeometry(belt({ type: 'icy', count: 300 }));
+    const metallic = renderedGeometry(belt({ type: 'metallic', count: 300 }));
+
+    expect(rocky).not.toContain(undefined);
+    expect(icy).not.toEqual(rocky);
+    expect(metallic).not.toEqual(rocky);
+    expect(metallic).not.toEqual(icy);
+  });
 });
 
 describe('belt type colour treatment', () => {
