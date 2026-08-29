@@ -12,6 +12,7 @@ import {
   Plus,
   Radius,
   Ruler,
+  Smartphone,
   Sparkles,
   Sun,
   Timer,
@@ -60,6 +61,7 @@ const ICONS = {
   play: Play,
   pause: Pause,
   download: Download,
+  smartphone: Smartphone,
 } as const satisfies Record<string, readonly IconNode[]>;
 
 export type IconName = keyof typeof ICONS;

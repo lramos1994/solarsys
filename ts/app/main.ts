@@ -21,6 +21,33 @@ import { createSceneStore } from './store';
 import { CANVAS_MARGIN } from '../generator/document';
 import { generatePlanetPreview } from '../generator/preview';
 import { validateScene, type RawSceneInput } from './validation';
+import {
+  downloadWallpaperBlob,
+  encodeWallpaper,
+  WallpaperUnavailableError,
+  wallpaperEncodingAvailable,
+  WALLPAPER_FRAME_COUNT,
+  wallpaperFilename,
+  wallpaperPreset,
+  type WallpaperPreset,
+} from './wallpaper';
+
+/**
+ * Test seams (WAL-006). The interaction suite drives the production bundle,
+ * where module internals are unreachable, so two narrow hooks are exposed:
+ *
+ *  - `__solarsysGenerationCount` reads the generator call counter (task 4.3),
+ *    letting a test prove an export never regenerates the scene.
+ *  - `__WALLPAPER_FRAME_COUNT__` overrides the export frame budget (task 4.2),
+ *    so a test can exercise the full encode + download path without waiting out
+ *    the multi-minute production render.
+ */
+declare global {
+  interface Window {
+    __solarsysGenerationCount?: () => number;
+    __WALLPAPER_FRAME_COUNT__?: number;
+  }
+}
 
 /** Scene identity is intentionally fixed until a future seed-control change. */
 const FIXED_SCENE_SEED = 20_260_826;
@@ -72,6 +99,11 @@ const CONTROL_FOR_FIELD: Record<string, string> = {
 export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INPUT): void {
   const store = createSceneStore();
 
+  // Expose the generator call counter for the interaction suite (WAL-006,
+  // task 4.3). Assigned before the first submit so a test can read a stable
+  // count across an export.
+  window.__solarsysGenerationCount = () => store.getGenerationCount();
+
   /**
    * Collapsed planet indices (CD-002, D-204, D-211).
    *
@@ -117,8 +149,15 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `${icon('pause')}<span data-role="playback-label">Pause animation</span></button>` +
     `<button type="button" data-action="download-svg">` +
     `${icon('download')}<span>Download SVG</span></button>` +
+    `<select class="wallpaper-preset" data-role="wallpaper-preset" aria-label="Wallpaper size">` +
+    `<option value="android">Android 1080×2400</option>` +
+    `<option value="iphone">iPhone 1179×2556</option>` +
+    `</select>` +
+    `<button type="button" data-action="download-wallpaper">` +
+    `${icon('smartphone')}<span>Export video</span></button>` +
     `</div>` +
     `</header>` +
+    `<p data-role="wallpaper-status" role="status" aria-live="polite" hidden></p>` +
     `<div class="preview-surface">` +
     `<div id="preview"></div>` +
     `<svg data-role="orbit-emphasis" aria-hidden="true" focusable="false">` +
@@ -152,8 +191,21 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
   const playbackButton = root.querySelector<HTMLButtonElement>('[data-action="toggle-playback"]');
   const notice = root.querySelector<HTMLElement>('[data-role="reduced-motion-notice"]');
+  const wallpaperButton = root.querySelector<HTMLButtonElement>('[data-action="download-wallpaper"]');
+  const wallpaperPresetSelect = root.querySelector<HTMLSelectElement>('[data-role="wallpaper-preset"]');
+  const wallpaperStatus = root.querySelector<HTMLElement>('[data-role="wallpaper-status"]');
 
-  if (!form || !preview || !errorList || !downloadButton || !playbackButton || !notice) {
+  if (
+    !form ||
+    !preview ||
+    !errorList ||
+    !downloadButton ||
+    !playbackButton ||
+    !notice ||
+    !wallpaperButton ||
+    !wallpaperPresetSelect ||
+    !wallpaperStatus
+  ) {
     throw new Error('Application shell failed to mount its own markup.');
   }
 
@@ -1189,6 +1241,69 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
     if (svg !== null && seed !== null) {
       downloadSvg(svg, seed);
+    }
+  });
+
+  /** The preset the wallpaper export encodes at, from the actions select. */
+  function selectedWallpaperPreset(): WallpaperPreset {
+    return wallpaperPreset(wallpaperPresetSelect!.value as WallpaperPreset['id']);
+  }
+
+  /** Show (or clear) the wallpaper status message (WAL-008). */
+  function showWallpaperStatus(message: string | null): void {
+    wallpaperStatus!.textContent = message;
+    wallpaperStatus!.hidden = message === null;
+  }
+
+  /** True while a wallpaper export is in flight (single-render guard). */
+  let wallpaperExporting = false;
+
+  // Wallpaper export (WAL-001, WAL-002, WAL-006, WAL-008): reads the STORED
+  // scene string and encodes it offscreen — it never calls the generator and
+  // never touches the preview or the SVG download.
+  wallpaperButton!.addEventListener('click', async () => {
+    if (wallpaperExporting) {
+      return;
+    }
+
+    const { seed, svg } = store.getState();
+
+    if (svg === null || seed === null) {
+      return;
+    }
+
+    // WAL-008: probe the encoder BEFORE starting. An unsupported browser gets
+    // an explicit message and keeps its SVG download fully functional.
+    if (!wallpaperEncodingAvailable()) {
+      showWallpaperStatus(
+        'Video wallpaper export is not available in this browser. You can still download the SVG.',
+      );
+      return;
+    }
+
+    const preset = selectedWallpaperPreset();
+    // Test seam (task 4.2): the interaction suite bounds the frame budget so
+    // the encode + download path completes without a multi-minute render.
+    const frames = window.__WALLPAPER_FRAME_COUNT__ ?? WALLPAPER_FRAME_COUNT;
+
+    wallpaperExporting = true;
+    wallpaperButton!.disabled = true;
+    showWallpaperStatus(null);
+
+    try {
+      const blob = await encodeWallpaper(svg, preset, { frames });
+      downloadWallpaperBlob(blob, wallpaperFilename(seed, preset));
+    } catch (error) {
+      // Distinguish an unavailable encoder (WAL-008) from a mid-render failure:
+      // the former is a browser capability, the latter a transient error.
+      showWallpaperStatus(
+        error instanceof WallpaperUnavailableError
+          ? 'Video wallpaper export is not available in this browser. You can still download the SVG.'
+          : 'Video wallpaper export failed.',
+      );
+    } finally {
+      wallpaperExporting = false;
+      wallpaperButton!.disabled = false;
     }
   });
 

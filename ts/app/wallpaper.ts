@@ -29,6 +29,8 @@
  * E-018). The generator stays pure and DOM-free.
  */
 
+import { ArrayBufferTarget, Muxer } from 'mp4-muxer';
+
 export interface WallpaperPreset {
   id: 'android' | 'iphone';
   width: number;
@@ -594,4 +596,281 @@ export async function renderWallpaperFrame(
   } finally {
     renderer.dispose();
   }
+}
+
+/* ----------------------------------------------------------------------------
+ * Encode (WAL-001, WAL-002, WAL-008).
+ *
+ * Baked frames are handed to the WebCodecs `VideoEncoder` with EXPLICIT
+ * per-frame timestamps (microseconds, `frame * 1e6 / WALLPAPER_FPS`), and the
+ * encoded chunks are multiplexed into an MP4 by `mp4-muxer`. This is a
+ * deliberate departure from the earlier `MediaRecorder` + `captureStream(0)` +
+ * `requestFrame()` pipeline, which timestamps every frame at wall-clock capture
+ * time. Because the render is offline at ~116 ms/frame (E-012), a MediaRecorder
+ * export advanced scene time at 1/30 s per frame while advancing presentation
+ * time by the render cost — the file played ~5x slow and ~5x long. Explicit
+ * timestamps decouple the presentation timeline from render wall time, so an
+ * N-frame export decodes as N/30 s at 30 fps (WAL-005 requires the exported
+ * belt speed to match the preview, which wall-clock pacing broke).
+ *
+ * Encoder availability is probed BEFORE any work starts (WAL-008). The probe is
+ * `MediaRecorder.isTypeSupported` over the MP4 types below (E-008, E-009): the
+ * only engine measured to encode H.264 MP4 is Chromium; Firefox reports zero
+ * supported types and WebKit was never assumed, so the probe runs at runtime
+ * and the caller surfaces an explicit message when nothing is supported.
+ * `VideoEncoder` (now present in all three engines, correcting the stale E-010)
+ * is additionally required, and the caller distinguishes an unavailable encoder
+ * from a mid-render failure.
+ * -------------------------------------------------------------------------- */
+
+/** Frames per second the loop is authored at (design.md resolved decision). */
+export const WALLPAPER_FPS = 30;
+
+/** Encoder bitrate in bits per second: 4 Mbps, the measured default (E-012). */
+export const WALLPAPER_BITRATE = 4_000_000;
+
+/**
+ * H.264 codec string the `VideoEncoder` is configured with: High profile,
+ * Level 5.0. The presets are tall phone frames (1080x2400 and 1179x2556), so
+ * Level 3.1 (`avc1.42001f`, the type MediaRecorder was measured with in E-008)
+ * is too small — it caps at 3600 macroblocks while 1080x2400 alone needs
+ * ~10,200. Level 5.0 caps at 22,080 macroblocks, which both presets fit.
+ */
+export const WALLPAPER_CODEC = 'avc1.640032';
+
+/** Total frames in one loop: 45 s at 30 fps = 1350. */
+export const WALLPAPER_FRAME_COUNT = WALLPAPER_LOOP_SECONDS * WALLPAPER_FPS;
+
+/**
+ * MP4 MIME types probed in preference order. `avc1.42001f` (H.264 Baseline
+ * 3.1) is the exact type measured working in Chromium (E-008); the bare
+ * `video/mp4` is the generic fallback a muxer may still accept. WebM is
+ * deliberately absent: the change resolves to MP4 only (design.md).
+ */
+const WALLPAPER_MIME_CANDIDATES = [
+  'video/mp4;codecs=avc1.42001f',
+  'video/mp4',
+] as const;
+
+/** Raised when no supported encoder exists, so the caller can say so (WAL-008). */
+export class WallpaperUnavailableError extends Error {
+  constructor() {
+    super('wallpaper: no supported video encoder is available in this browser');
+    this.name = 'WallpaperUnavailableError';
+  }
+}
+
+/**
+ * Probe the platform recorder for a usable MP4 type. Returns the first
+ * supported MIME type, or null when the browser offers none (WAL-008). WebKit
+ * is NOT assumed: this is a runtime probe, never a vendor-string feature
+ * detect.
+ */
+export function supportedWallpaperMimeType(): string | null {
+  if (
+    typeof MediaRecorder === 'undefined' ||
+    typeof MediaRecorder.isTypeSupported !== 'function'
+  ) {
+    return null;
+  }
+
+  for (const type of WALLPAPER_MIME_CANDIDATES) {
+    if (MediaRecorder.isTypeSupported(type)) {
+      return type;
+    }
+  }
+
+  return null;
+}
+
+/**
+ * True when the full encode pipeline is available: an MP4 MIME type the
+ * recorder supports (WAL-008, E-008/E-009) AND the WebCodecs `VideoEncoder`
+ * the export actually drives (correcting the stale E-010 that recorded it
+ * absent). Both are absent together in Firefox and WebKit, and present together
+ * in Chromium, but each is probed independently rather than assumed.
+ */
+export function wallpaperEncodingAvailable(): boolean {
+  return supportedWallpaperMimeType() !== null && typeof VideoEncoder !== 'undefined';
+}
+
+/** Download filename for a wallpaper video: `solarsys-<seed>-<preset>.mp4`. */
+export function wallpaperFilename(seed: number, preset: WallpaperPreset): string {
+  return `solarsys-${seed}-${preset.id}.mp4`;
+}
+
+/** Encoder knobs. Production uses the full loop; tests pass a small budget. */
+export interface WallpaperEncodeOptions {
+  /** Frame budget. Defaults to the full 45 s loop at 30 fps. */
+  frames?: number;
+  /** Reported after each captured frame (WAL-007 surface). */
+  onProgress?: (rendered: number, total: number) => void;
+  /** Abort signal checked between frames. */
+  signal?: AbortSignal;
+}
+
+/**
+ * Coded (macroblock-aligned, even) dimensions for a preset. H.264 4:2:0 rejects
+ * odd dimensions: the iPhone preset is 1179 px wide (odd), so it is coded at
+ * 1180 and cropped to the preset size through the `VideoFrame` `visibleRect`.
+ * The encoded bitstream then carries the crop and decodes at the preset size.
+ */
+function codedDimensions(preset: WallpaperPreset): { width: number; height: number } {
+  return {
+    width: preset.width + (preset.width % 2),
+    height: preset.height + (preset.height % 2),
+  };
+}
+
+/**
+ * Copy a rasterized frame onto a coded-size canvas, padding the right/bottom
+ * edge when a preset dimension is odd. The pad column/row falls outside the
+ * `VideoFrame` visible rect and never reaches the displayed pixels.
+ */
+function toCodedFrame(
+  frame: HTMLCanvasElement,
+  coded: { width: number; height: number },
+): HTMLCanvasElement {
+  if (frame.width === coded.width && frame.height === coded.height) {
+    return frame;
+  }
+
+  const canvas = document.createElement('canvas');
+  canvas.width = coded.width;
+  canvas.height = coded.height;
+  const context = canvas.getContext('2d');
+
+  if (context === null) {
+    throw new Error('wallpaper: 2D canvas context unavailable');
+  }
+
+  context.drawImage(frame, 0, 0);
+
+  return canvas;
+}
+
+/**
+ * Encode the stored scene as a looping MP4 at the preset size (WAL-001,
+ * WAL-002). Reads only the stored string; it never regenerates a scene
+ * (WAL-006).
+ *
+ * Each baked frame is encoded with an explicit presentation timestamp of
+ * `frame / WALLPAPER_FPS` seconds, so the decoded timeline is exactly
+ * `totalFrames / WALLPAPER_FPS` seconds at 30 fps regardless of the offline
+ * render's wall-clock pace. Throws `WallpaperUnavailableError` when no usable
+ * encoder exists (WAL-008).
+ */
+export async function encodeWallpaper(
+  svg: string,
+  preset: WallpaperPreset,
+  options: WallpaperEncodeOptions = {},
+): Promise<Blob> {
+  const mimeType = supportedWallpaperMimeType();
+
+  if (mimeType === null || typeof VideoEncoder === 'undefined') {
+    throw new WallpaperUnavailableError();
+  }
+
+  const totalFrames = options.frames ?? WALLPAPER_FRAME_COUNT;
+
+  if (totalFrames <= 0) {
+    throw new Error('wallpaper: frame budget must be positive');
+  }
+
+  const coded = codedDimensions(preset);
+  const renderer = createWallpaperRenderer(svg, preset);
+  const muxer = new Muxer({
+    target: new ArrayBufferTarget(),
+    video: {
+      codec: 'avc',
+      width: preset.width,
+      height: preset.height,
+      frameRate: WALLPAPER_FPS,
+    },
+    fastStart: 'in-memory',
+  });
+
+  let encoderError: Error | null = null;
+  const encoder = new VideoEncoder({
+    output: (chunk, metadata) => muxer.addVideoChunk(chunk, metadata),
+    error: (error) => {
+      encoderError = error instanceof Error ? error : new Error(String(error));
+    },
+  });
+
+  try {
+    // WAL-008: probe the exact config before encoding rather than assuming the
+    // static codec string is available.
+    const support = await VideoEncoder.isConfigSupported({
+      codec: WALLPAPER_CODEC,
+      width: coded.width,
+      height: coded.height,
+      bitrate: WALLPAPER_BITRATE,
+      framerate: WALLPAPER_FPS,
+      avc: { format: 'avc' },
+    });
+
+    if (!support.supported) {
+      throw new WallpaperUnavailableError();
+    }
+
+    encoder.configure({
+      codec: WALLPAPER_CODEC,
+      width: coded.width,
+      height: coded.height,
+      bitrate: WALLPAPER_BITRATE,
+      framerate: WALLPAPER_FPS,
+      avc: { format: 'avc' },
+    });
+
+    for (let frame = 0; frame < totalFrames; frame += 1) {
+      if (options.signal?.aborted) {
+        throw new DOMException('wallpaper: export aborted', 'AbortError');
+      }
+
+      const baked = await renderer.renderFrame(frame / WALLPAPER_FPS);
+      const codedFrame = toCodedFrame(baked, coded);
+      const videoFrame = new VideoFrame(codedFrame, {
+        visibleRect: { x: 0, y: 0, width: preset.width, height: preset.height },
+        timestamp: Math.round((frame * 1_000_000) / WALLPAPER_FPS),
+        duration: Math.round(1_000_000 / WALLPAPER_FPS),
+      });
+
+      encoder.encode(videoFrame, { keyFrame: frame === 0 });
+      videoFrame.close();
+      options.onProgress?.(frame + 1, totalFrames);
+    }
+
+    await encoder.flush();
+
+    if (encoderError !== null) {
+      throw encoderError;
+    }
+
+    muxer.finalize();
+
+    return new Blob([muxer.target.buffer], { type: 'video/mp4' });
+  } finally {
+    renderer.dispose();
+
+    if (encoder.state !== 'closed') {
+      encoder.close();
+    }
+  }
+}
+
+/** Trigger a browser download for a wallpaper video blob (mirrors downloadSvg). */
+export function downloadWallpaperBlob(blob: Blob, filename: string): void {
+  const url = URL.createObjectURL(blob);
+  const anchor = document.createElement('a');
+
+  anchor.href = url;
+  anchor.download = filename;
+  anchor.hidden = true;
+  document.body.append(anchor);
+  anchor.click();
+  anchor.remove();
+
+  // Revoke after the browser has consumed the object URL for this click.
+  setTimeout(() => URL.revokeObjectURL(url), 0);
 }

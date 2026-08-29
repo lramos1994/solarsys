@@ -22,11 +22,19 @@ export interface SceneStore {
   getState(): SceneState;
   submit(input: RawSceneInput): void;
   subscribe(listener: () => void): () => void;
+  /** Number of times the generator has been invoked (WAL-006 instrumentation). */
+  getGenerationCount(): number;
 }
 
 export function createSceneStore(): SceneStore {
   let state: SceneState = { svg: null, seed: null, errors: [] };
   const listeners = new Set<() => void>();
+
+  // WAL-006: the export path must read the stored string, never regenerate it.
+  // Because a regeneration with a fixed seed and unchanged parameters produces
+  // byte-identical output, byte comparison alone cannot detect it — so the
+  // store counts actual `generateScene` invocations and exposes the tally.
+  let generationCount = 0;
 
   function setState(next: SceneState): void {
     state = next;
@@ -52,11 +60,9 @@ export function createSceneStore(): SceneStore {
 
       // Generate once and keep the string: preview and download must consume
       // byte-identical output (D-19, EXP-002).
-      setState({
-        svg: generateScene(result.params, result.seed),
-        seed: result.seed,
-        errors: [],
-      });
+      const svg = generateScene(result.params, result.seed);
+      generationCount += 1;
+      setState({ svg, seed: result.seed, errors: [] });
     },
 
     subscribe(listener) {
@@ -66,5 +72,7 @@ export function createSceneStore(): SceneStore {
         listeners.delete(listener);
       };
     },
+
+    getGenerationCount: () => generationCount,
   };
 }
