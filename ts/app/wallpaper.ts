@@ -536,19 +536,148 @@ async function rasterize(svg: SVGSVGElement, preset: WallpaperPreset): Promise<H
   return canvas;
 }
 
+/* ----------------------------------------------------------------------------
+ * Static background reuse (WAL-010).
+ *
+ * The per-frame cost is dominated by rasterizing the whole document, most of
+ * which is the ambient starfield (E-012): thousands of static stars that never
+ * move. `createWallpaperRenderer` below therefore rasterizes that static prefix
+ * ONCE and composites the animated foreground over it on every subsequent
+ * frame, instead of re-rasterizing the entire document each frame.
+ *
+ * The split is structural, not role-based. The scene is emitted in generation
+ * order — background first, then belt, orbits, sun, planets, comets (GEN-004)
+ * — so the starfield is exactly the leading run of siblings painted before the
+ * first SMIL-animated host. Splitting at that boundary preserves z-order,
+ * because the prefix is by definition everything painted before any animation
+ * (when there is no belt, the leading run simply extends through the static
+ * orbits and sun, which still come before the first planet — so they stay
+ * correctly beneath it either way). Defs are never split: the background clone
+ * keeps every leading <defs> it needs and the foreground clone keeps every
+ * <defs> too, so cross-references like the belt's `href="#asteroid…"` symbols
+ * and the sun's gradients still resolve after the visible starfield is removed.
+ * -------------------------------------------------------------------------- */
+
+/** SMIL animation elements the seek-and-bake pipeline walks. */
+const ANIMATION_SELECTOR = 'animateMotion, animateTransform';
+
+/** Where the static prefix ends: the container to split and the index of the
+ * first animated host within it. */
+interface StaticSplit {
+  container: Element;
+  boundary: number;
+}
+
+/** The first animated host and its container, or null when nothing animates. */
+function locateStaticSplit(svg: SVGSVGElement): StaticSplit | null {
+  const firstAnimation = svg.querySelector(ANIMATION_SELECTOR);
+
+  if (firstAnimation === null) {
+    return null;
+  }
+
+  // Climb from the animation element to the host group that sits directly in
+  // the scene's content container — either a direct child of the root
+  // (hand-built scenes) or a direct child of the root's translate <g>
+  // (generated scenes). Nested animations (a moon orbiting inside a moving
+  // planet) climb to the same outer host, so the split never lands mid-tree.
+  let host: Element | null = firstAnimation.parentElement as Element | null;
+
+  while (host !== null && host !== svg) {
+    const parent = host.parentElement as Element | null;
+
+    if (parent === null || parent === svg) {
+      break;
+    }
+
+    if ((parent.parentElement as Element | null) === svg) {
+      break;
+    }
+
+    host = parent;
+  }
+
+  if (host === null || host === svg) {
+    return null;
+  }
+
+  const container = host.parentElement as Element | null ?? svg;
+  const boundary = Array.from(container.children).indexOf(host);
+
+  return { container, boundary: boundary === -1 ? container.children.length : boundary };
+}
+
+/** Clone the scene and strip the foreground, leaving the static starfield. */
+function toStaticBackground(svg: SVGSVGElement): SVGSVGElement {
+  const clone = svg.cloneNode(true) as SVGSVGElement;
+  const split = locateStaticSplit(clone);
+
+  if (split !== null) {
+    const children = Array.from(split.container.children);
+
+    for (let index = split.boundary; index < children.length; index += 1) {
+      children[index]!.remove();
+    }
+  }
+
+  return clone;
+}
+
+/** Remove the starfield's visible elements from a container in place, keeping
+ * every `<defs>` so the remaining foreground's references still resolve. */
+function removeStaticBackground(container: Element, boundary: number): void {
+  const children = Array.from(container.children);
+
+  for (let index = 0; index < boundary; index += 1) {
+    const child = children[index]!;
+
+    if (child.tagName.toLowerCase() !== 'defs') {
+      child.remove();
+    }
+  }
+}
+
+/** Composite the cached static background under a baked foreground frame. */
+function composite(
+  background: HTMLCanvasElement,
+  foreground: HTMLCanvasElement,
+  preset: WallpaperPreset,
+): HTMLCanvasElement {
+  const canvas = document.createElement('canvas');
+  canvas.width = preset.width;
+  canvas.height = preset.height;
+
+  const context = canvas.getContext('2d');
+
+  if (context === null) {
+    throw new Error('wallpaper: 2D canvas context unavailable');
+  }
+
+  context.drawImage(background, 0, 0);
+  context.drawImage(foreground, 0, 0);
+
+  return canvas;
+}
+
 /** A live working copy that bakes and rasterizes frames for one export. */
 export interface WallpaperRenderer {
   renderFrame(timeSeconds: number): Promise<HTMLCanvasElement>;
   dispose(): void;
 }
 
-/** Renderer knobs. Loop closure is on by default (WAL-004/WAL-005). */
+/** Renderer knobs. Loop closure and background reuse are on by default. */
 export interface WallpaperRendererOptions {
   /**
    * Apply loop closure before baking. Defaults to true; tests pass `false` to
    * rasterize the unmodified belt for the control arm of the symmetry probe.
    */
   closeLoop?: boolean;
+  /**
+   * Reuse the rasterized static starfield across frames instead of
+   * re-rasterizing the whole document each frame (WAL-010). Defaults to true;
+   * the cost test passes `false` to measure the non-reused baseline.
+   */
+  reuseBackground?: boolean;
 }
 
 /**
@@ -567,13 +696,55 @@ export function createWallpaperRenderer(
     closeLoop(working.svg);
   }
 
+  // WAL-010: when reuse is enabled and the scene has a static prefix to
+  // separate, rasterize the starfield once and composite the animated
+  // foreground over it per frame. The live working copy is then trimmed to the
+  // foreground, so per-frame cloning/rasterizing skips the thousands of static
+  // stars. The background source is captured from the full scene BEFORE the
+  // trim, and rasterized lazily on the first frame.
+  const split =
+    options.reuseBackground === false ? null : locateStaticSplit(working.svg);
+  let backgroundSource: SVGSVGElement | null = null;
+  let backgroundCanvas: HTMLCanvasElement | null = null;
+  let backgroundPromise: Promise<HTMLCanvasElement> | null = null;
+
+  if (split !== null) {
+    backgroundSource = toStaticBackground(working.svg);
+    removeStaticBackground(split.container, split.boundary);
+  }
+
+  async function background(): Promise<HTMLCanvasElement> {
+    if (backgroundCanvas !== null) {
+      return backgroundCanvas;
+    }
+
+    if (backgroundSource === null) {
+      throw new Error('wallpaper: static background was not prepared');
+    }
+
+    if (backgroundPromise === null) {
+      backgroundPromise = rasterize(backgroundSource, preset).then((canvas) => {
+        backgroundCanvas = canvas;
+        return canvas;
+      });
+    }
+
+    return backgroundPromise;
+  }
+
   return {
     async renderFrame(timeSeconds: number): Promise<HTMLCanvasElement> {
       await seekTo(working.svg, timeSeconds);
+
       const clone = working.svg.cloneNode(true) as SVGSVGElement;
       bake(working.svg, clone);
+      const frame = await rasterize(clone, preset);
 
-      return rasterize(clone, preset);
+      if (split === null) {
+        return frame;
+      }
+
+      return composite(await background(), frame, preset);
     },
 
     dispose(): void {
