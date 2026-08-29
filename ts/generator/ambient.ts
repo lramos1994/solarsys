@@ -177,6 +177,41 @@ export type BeltType = (typeof BELT_TYPES)[number];
  */
 export const DEFAULT_BELT_TYPE: BeltType = 'rocky';
 
+type AsteroidShapeDescriptor = Readonly<{
+  silhouette: string;
+  highlight: string;
+  shadow: string;
+}>;
+
+function transformPoints(
+  points: string,
+  scale: number,
+  offsetX: number,
+  offsetY: number,
+): string {
+  return points
+    .trim()
+    .split(/\s+/)
+    .map((pair) => {
+      const [xText, yText] = pair.split(',');
+      const x = Number(xText);
+      const y = Number(yText);
+      const transformedX = round(x * scale + offsetX);
+      const transformedY = round(y * scale + offsetY);
+
+      return `${transformedX},${transformedY}`;
+    })
+    .join(' ');
+}
+
+function makeAsteroidShape(silhouette: string): AsteroidShapeDescriptor {
+  return {
+    silhouette,
+    highlight: transformPoints(silhouette, 0.62, -0.1, -0.18),
+    shadow: transformPoints(silhouette, 0.68, 0.14, 0.16),
+  };
+}
+
 /**
  * Per-type rock silhouettes. Each set holds more than two symbols so a belt
  * reads as a field of distinct bodies rather than two repeated stamps
@@ -185,24 +220,24 @@ export const DEFAULT_BELT_TYPE: BeltType = 'rocky';
  * The first two rocky shapes are the baseline pair, preserved so the default
  * type keeps its familiar character.
  */
-export const BELT_SHAPES: Record<BeltType, readonly string[]> = {
+export const BELT_SHAPES: Record<BeltType, readonly AsteroidShapeDescriptor[]> = {
   rocky: [
-    '0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8',
-    '0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7',
-    '0.95,-0.15 0.45,0.55 -0.25,0.9 -0.85,0.15 -0.55,-0.65 0.2,-0.85',
-    '0.7,0.35 -0.05,0.8 -0.75,0.45 -0.9,-0.35 -0.15,-0.9 0.6,-0.5',
+    makeAsteroidShape('0.9,0 0.3,0.7 -0.6,0.6 -0.9,-0.2 -0.2,-0.8'),
+    makeAsteroidShape('0.8,0.2 0.1,0.9 -0.8,0.3 -0.5,-0.6 0.4,-0.7'),
+    makeAsteroidShape('0.95,-0.15 0.45,0.55 -0.25,0.9 -0.85,0.15 -0.55,-0.65 0.2,-0.85'),
+    makeAsteroidShape('0.7,0.35 -0.05,0.8 -0.75,0.45 -0.9,-0.35 -0.15,-0.9 0.6,-0.5'),
   ],
   icy: [
-    '1,0 0.2,0.45 -0.35,0.95 -0.55,0.2 -0.95,-0.35 -0.2,-0.5 0.35,-0.95',
-    '0.55,0.15 0.15,1 -0.3,0.35 -1,0.1 -0.35,-0.4 0.1,-0.95 0.5,-0.35',
-    '0.85,-0.35 0.4,0.25 0.6,0.8 -0.2,0.6 -0.8,0.85 -0.6,0.05 -0.9,-0.55 -0.1,-0.4',
-    '0.9,0.45 0.05,0.55 -0.45,1 -0.55,0.25 -1,-0.2 -0.3,-0.6 0.35,-0.9 0.45,-0.2',
+    makeAsteroidShape('1,0 0.2,0.45 -0.35,0.95 -0.55,0.2 -0.95,-0.35 -0.2,-0.5 0.35,-0.95'),
+    makeAsteroidShape('0.55,0.15 0.15,1 -0.3,0.35 -1,0.1 -0.35,-0.4 0.1,-0.95 0.5,-0.35'),
+    makeAsteroidShape('0.85,-0.35 0.4,0.25 0.6,0.8 -0.2,0.6 -0.8,0.85 -0.6,0.05 -0.9,-0.55 -0.1,-0.4'),
+    makeAsteroidShape('0.9,0.45 0.05,0.55 -0.45,1 -0.55,0.25 -1,-0.2 -0.3,-0.6 0.35,-0.9 0.45,-0.2'),
   ],
   metallic: [
-    '0.85,-0.5 0.85,0.5 0,0.9 -0.85,0.5 -0.85,-0.5 0,-0.9',
-    '0.75,-0.75 0.9,0.2 0.2,0.9 -0.75,0.75 -0.9,-0.2 -0.2,-0.9',
-    '0.9,-0.25 0.65,0.65 -0.25,0.9 -0.9,0.25 -0.65,-0.65 0.25,-0.9',
-    '0.7,-0.7 0.7,0.7 -0.7,0.7 -0.7,-0.7',
+    makeAsteroidShape('0.85,-0.5 0.85,0.5 0,0.9 -0.85,0.5 -0.85,-0.5 0,-0.9'),
+    makeAsteroidShape('0.75,-0.75 0.9,0.2 0.2,0.9 -0.75,0.75 -0.9,-0.2 -0.2,-0.9'),
+    makeAsteroidShape('0.9,-0.25 0.65,0.65 -0.25,0.9 -0.9,0.25 -0.65,-0.65 0.25,-0.9'),
+    makeAsteroidShape('0.7,-0.7 0.7,0.7 -0.7,0.7 -0.7,-0.7'),
   ],
 };
 
@@ -216,37 +251,40 @@ export interface AsteroidBeltConfig {
   type?: BeltType;
 }
 
-/**
- * Derive the belt's rock tones from the palette (baseline `Theme::asteroid`),
- * then bias them by belt type.
- *
- * The palette stays the source of hue, so palettes and belt types compose
- * (design §3): the type only shifts the derived rock, it never replaces it.
- */
-function asteroidColors(
+function rockTone(
   palette: Palette,
   type: BeltType = DEFAULT_BELT_TYPE,
-): { fill: string; stroke: string } {
-  const rock = shade(
+): { base: string; highlight: string; shadow: string } {
+  const base = shade(
     mix(palette.planetHues[0], palette.stars[palette.stars.length - 1]!, 0.5),
     0.12,
   );
 
   if (type === 'icy') {
-    // Pale and cold: pulled toward the palette's mid star tone and lifted.
-    const ice = tint(mix(rock, palette.stars[1], 0.55), 0.15);
+    const pale = tint(mix(base, palette.stars[1], 0.55), 0.15);
 
-    return { fill: ice, stroke: shade(ice, 0.35) };
+    return {
+      base: pale,
+      highlight: tint(mix(pale, palette.stars[2] ?? palette.stars[1], 0.45), 0.18),
+      shadow: shade(mix(pale, palette.stars[0], 0.55), 0.42),
+    };
   }
 
   if (type === 'metallic') {
-    // Desaturated and darker, with a lighter specular edge.
-    const metal = shade(mix(rock, shade(palette.stars[0], 0.4), 0.6), 0.08);
+    const metal = shade(mix(base, shade(palette.stars[0], 0.4), 0.6), 0.08);
 
-    return { fill: metal, stroke: tint(metal, 0.3) };
+    return {
+      base: metal,
+      highlight: tint(mix(metal, palette.stars[2] ?? palette.stars[1], 0.5), 0.26),
+      shadow: shade(mix(metal, palette.stars[0], 0.6), 0.5),
+    };
   }
 
-  return { fill: rock, stroke: shade(rock, 0.45) };
+  return {
+    base,
+    highlight: tint(mix(base, palette.stars[2] ?? palette.stars[1], 0.4), 0.2),
+    shadow: shade(base, 0.45),
+  };
 }
 
 /**
@@ -265,7 +303,7 @@ export function renderAsteroidBelt(
   const rx = canvas.width * 0.42;
   const ry = canvas.height * 0.42;
   const type = config?.type ?? DEFAULT_BELT_TYPE;
-  const colors = asteroidColors(palette, type);
+  const colors = rockTone(palette, type);
 
   const shapes = BELT_SHAPES[type];
   const shapeIds = shapes.map(() => ids.next('asteroid'));
@@ -304,19 +342,29 @@ export function renderAsteroidBelt(
     const opacity = randomInt(random, 75, 100) / 100;
 
     bodies +=
-      `<use data-role="asteroid" href="#${symbol}" fill="${colors.fill}"` +
-      ` stroke="${colors.stroke}" stroke-width="0.15" opacity="${opacity}"` +
+      `<use data-role="asteroid" href="#${symbol}" opacity="${opacity}"` +
       ` transform="translate(${x} ${y}) scale(${scale}) rotate(${rotation})"/>`;
   }
 
   const duration = config?.period ?? randomInt(random, 120, 240);
   const beltId = ids.next('belt-group');
+  const symbols = shapes
+    .map((shape, index) => {
+      const symbolId = shapeIds[index];
+
+      return (
+        `<g id="${symbolId}" data-role="asteroid-symbol">` +
+        `<polygon data-role="asteroid-silhouette" points="${shape.silhouette}" fill="${colors.base}" stroke="${shade(colors.base, 0.45)}" stroke-width="0.15"/>` +
+        `<polygon data-role="asteroid-highlight" points="${shape.highlight}" fill="${colors.highlight}"/>` +
+        `<polygon data-role="asteroid-shadow" points="${shape.shadow}" fill="${colors.shadow}"/>` +
+        `</g>`
+      );
+    })
+    .join('');
 
   return (
     `<defs>` +
-    shapes
-      .map((points, index) => `<polygon id="${shapeIds[index]}" points="${points}"/>`)
-      .join('') +
+    symbols +
     `</defs>` +
     `<g data-role="asteroid-belt">` +
     `<animateTransform attributeName="transform" type="rotate"` +
