@@ -54,7 +54,7 @@ function parse(markup: string): Document {
 }
 
 function symbolIds(markup: string): string[] {
-  return [...parse(markup).querySelectorAll('defs [id]')].map(
+  return [...parse(markup).querySelectorAll('defs g[data-role="asteroid-symbol"]')].map(
     (element) => element.getAttribute('id') as string,
   );
 }
@@ -67,10 +67,12 @@ function asteroids(markup: string): Element[] {
 function symbolGeometry(markup: string): Map<string, string> {
   const geometry = new Map<string, string>();
 
-  for (const polygon of parse(markup).querySelectorAll('defs polygon[id]')) {
+  for (const symbol of parse(markup).querySelectorAll('defs g[data-role="asteroid-symbol"]')) {
+    const silhouette = symbol.querySelector('[data-role="asteroid-silhouette"]');
+
     geometry.set(
-      polygon.getAttribute('id') as string,
-      polygon.getAttribute('points') as string,
+      symbol.getAttribute('id') as string,
+      silhouette?.getAttribute('points') as string,
     );
   }
 
@@ -86,6 +88,14 @@ function renderedGeometry(markup: string): string[] {
 
     return geometry.get(href) as string;
   });
+}
+
+function asteroidSymbols(markup: string): Element[] {
+  return [...parse(markup).querySelectorAll('defs g[data-role="asteroid-symbol"]')];
+}
+
+function symbolParts(symbol: Element, role: string): Element[] {
+  return [...symbol.querySelectorAll(`[data-role="${role}"]`)];
 }
 
 describe('belt shape sets', () => {
@@ -127,14 +137,42 @@ describe('belt shape sets', () => {
   }
 });
 
-describe('belt shape GEOMETRY differs by type', () => {
+describe('belt composite symbols', () => {
   for (const type of ['rocky', 'icy', 'metallic'] as const) {
-    it(`emits exactly the authored ${type} silhouettes`, () => {
-      expect([...symbolGeometry(belt({ type })).values()]).toEqual([
-        ...BELT_SHAPES[type],
-      ]);
+    it(`emits composite ${type} asteroid symbols with silhouette, highlight, and shadow`, () => {
+      const symbols = asteroidSymbols(belt({ type }));
+
+      expect(symbols).toHaveLength(BELT_SHAPES[type].length);
+
+      for (const symbol of symbols) {
+        expect(symbolParts(symbol, 'asteroid-silhouette')).toHaveLength(1);
+        expect(symbolParts(symbol, 'asteroid-highlight')).toHaveLength(1);
+        expect(symbolParts(symbol, 'asteroid-shadow')).toHaveLength(1);
+      }
     });
   }
+
+  it('assigns each belt type a distinct material paint family', () => {
+    const paintFamilies = (['rocky', 'icy', 'metallic'] as const).map((type) =>
+      asteroidSymbols(belt({ type })).map((symbol) => ({
+        silhouette: symbolParts(symbol, 'asteroid-silhouette')[0]?.getAttribute('fill'),
+        highlight: symbolParts(symbol, 'asteroid-highlight')[0]?.getAttribute('fill'),
+        shadow: symbolParts(symbol, 'asteroid-shadow')[0]?.getAttribute('fill'),
+      })),
+    );
+
+    expect(new Set(paintFamilies.map((family) => JSON.stringify(family))).size).toBe(
+      paintFamilies.length,
+    );
+  });
+
+  it('emits only the authored silhouette shapes for each type', () => {
+    for (const type of ['rocky', 'icy', 'metallic'] as const) {
+      expect([...symbolGeometry(belt({ type })).values()]).toEqual(
+        BELT_SHAPES[type].map((shape) => shape.silhouette),
+      );
+    }
+  });
 
   it('shares no silhouette between any two belt types', () => {
     const points = (type: BeltType): Set<string> =>
@@ -165,40 +203,43 @@ describe('belt shape GEOMETRY differs by type', () => {
   });
 });
 
-describe('belt type colour treatment', () => {
-  it('renders a different rock fill for each type at identical params and seed', () => {
-    const fills = (['rocky', 'icy', 'metallic'] as const).map((type) => {
-      const first = asteroids(belt({ type }))[0];
+describe('belt symbol material treatment', () => {
+  it('renders a different material paint family for each type', () => {
+    const families = (['rocky', 'icy', 'metallic'] as const).map((type) => {
+      const symbol = asteroidSymbols(belt({ type }))[0];
 
-      return first?.getAttribute('fill') as string;
+      return {
+        silhouette: symbolParts(symbol!, 'asteroid-silhouette')[0]?.getAttribute('fill'),
+        highlight: symbolParts(symbol!, 'asteroid-highlight')[0]?.getAttribute('fill'),
+        shadow: symbolParts(symbol!, 'asteroid-shadow')[0]?.getAttribute('fill'),
+      };
     });
 
-    expect(new Set(fills).size).toBe(fills.length);
+    expect(new Set(families.map((family) => JSON.stringify(family))).size).toBe(families.length);
   });
 
-  it('renders a different rock stroke for each type', () => {
-    const strokes = (['rocky', 'icy', 'metallic'] as const).map((type) => {
-      const first = asteroids(belt({ type }))[0];
+  it('still derives the material family from the palette', () => {
+    const materialFamily = (markup: string) => {
+      const symbol = asteroidSymbols(markup)[0];
 
-      return first?.getAttribute('stroke') as string;
-    });
+      return {
+        silhouette: symbolParts(symbol!, 'asteroid-silhouette')[0]?.getAttribute('fill'),
+        highlight: symbolParts(symbol!, 'asteroid-highlight')[0]?.getAttribute('fill'),
+        shadow: symbolParts(symbol!, 'asteroid-shadow')[0]?.getAttribute('fill'),
+      };
+    };
 
-    expect(new Set(strokes).size).toBe(strokes.length);
-  });
-
-  it('still derives the rock tone from the palette', () => {
-    const aurora = asteroids(belt({ type: 'rocky' }))[0]?.getAttribute('fill');
-    const ember = asteroids(
-      renderAsteroidBelt(
-        CANVAS,
-        paletteByName('Ember'),
-        createIdGenerator(42),
-        createPrng(42),
-        { ...BASE, type: 'rocky' } as AsteroidBeltConfig,
+    expect(materialFamily(belt({ type: 'rocky' }))).not.toEqual(
+      materialFamily(
+        renderAsteroidBelt(
+          CANVAS,
+          paletteByName('Ember'),
+          createIdGenerator(42),
+          createPrng(42),
+          { ...BASE, type: 'rocky' } as AsteroidBeltConfig,
+        ),
       ),
-    )[0]?.getAttribute('fill');
-
-    expect(aurora).not.toBe(ember);
+    );
   });
 });
 
