@@ -7,6 +7,7 @@ import { paletteByName } from '../../ts/generator/palette';
 import {
   MAX_RING_TILT,
   MIN_RING_TILT,
+  RING_TYPES,
   renderPlanetWithRing,
   ringAssignment,
 } from '../../ts/generator/ring';
@@ -145,6 +146,80 @@ describe('ring occlusion', () => {
     );
 
     expect(report.violations).toEqual([]);
+  });
+});
+
+describe('ring layer detail (GEN-022)', () => {
+  function authoredMarkup(type: 'Thin' | 'Banded' | 'Wide'): string {
+    return renderPlanetWithRing({
+      size: 10,
+      index: 0,
+      palette: PALETTE,
+      ids: createIdGenerator(42),
+      random: createPrng(42),
+      ring: { type, sizePercent: 210, inclinationDegrees: 16 },
+    } as unknown as Parameters<typeof renderPlanetWithRing>[0]);
+  }
+
+  function pieces(markup: string): { back: Element; front: Element } {
+    const { document } = parseHTML(
+      `<html><body><svg xmlns="http://www.w3.org/2000/svg">${markup}</svg></body></html>`,
+    );
+    const back = document.querySelector('[data-role="ring-back"]');
+    const front = document.querySelector('[data-role="ring-front"]');
+
+    if (!back || !front) {
+      throw new Error('expected both ring pieces to be present');
+    }
+
+    return { back, front };
+  }
+
+  for (const type of RING_TYPES) {
+    it(`renders at least three concentric layers on both pieces of a ${type} ring`, () => {
+      const { back, front } = pieces(authoredMarkup(type));
+
+      expect(back.querySelectorAll('ellipse').length).toBeGreaterThanOrEqual(3);
+      expect(front.querySelectorAll('path').length).toBeGreaterThanOrEqual(3);
+    });
+
+    it(`includes a non-uniform radial/detail cue on both pieces of a ${type} ring`, () => {
+      const { back, front } = pieces(authoredMarkup(type));
+
+      // A uniform ellipse/arc stroke has no dash pattern; the detail cue is
+      // required to break that uniformity, so at least one layer per piece
+      // must carry a stroke-dasharray (a radial/particulate cue).
+      const backDashed = [...back.querySelectorAll('ellipse')].some(
+        (el) => el.getAttribute('stroke-dasharray') !== null,
+      );
+      const frontDashed = [...front.querySelectorAll('path')].some(
+        (el) => el.getAttribute('stroke-dasharray') !== null,
+      );
+
+      expect(backDashed).toBe(true);
+      expect(frontDashed).toBe(true);
+    });
+
+    it(`matches layer counts between the back and front pieces of a ${type} ring`, () => {
+      const { back, front } = pieces(authoredMarkup(type));
+
+      expect(front.querySelectorAll('path').length).toBe(
+        back.querySelectorAll('ellipse').length,
+      );
+    });
+  }
+
+  it('keeps distinct layer compositions across ring types', () => {
+    const compositions = RING_TYPES.map((type) => {
+      const { back } = pieces(authoredMarkup(type));
+
+      return back.querySelectorAll('ellipse').length + ':' +
+        [...back.querySelectorAll('ellipse')].filter(
+          (el) => el.getAttribute('stroke-dasharray') !== null,
+        ).length;
+    });
+
+    expect(new Set(compositions).size).toBeGreaterThan(1);
   });
 });
 
