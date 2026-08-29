@@ -143,7 +143,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `</aside>` +
     `<section class="preview-pane" data-role="instrument-stage" aria-label="Observatory preview stage">` +
     `<header class="stage-heading">` +
-    `<div><p class="eyebrow">Live observatory</p><h2>Generated scene</h2></div>` +
+    `<div class="stage-heading-copy">` +
+    `<p class="eyebrow">Live observatory</p><h2>Generated scene</h2>` +
+    `</div>` +
+    `<button type="button" class="wallpaper-guidance-trigger" data-action="show-wallpaper-guidance">` +
+    `${icon('info')}<span>How to apply</span></button>` +
     `<div class="stage-actions" data-role="instrument-actions" aria-label="Scene actions">` +
     `<button type="button" data-action="toggle-playback">` +
     `${icon('pause')}<span data-role="playback-label">Pause animation</span></button>` +
@@ -158,6 +162,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `</div>` +
     `</header>` +
     `<p data-role="wallpaper-status" role="status" aria-live="polite" hidden></p>` +
+    `<div class="wallpaper-progress" data-role="wallpaper-progress" role="progressbar"` +
+    ` aria-valuemin="0" aria-valuemax="${WALLPAPER_FRAME_COUNT}" aria-valuenow="0" hidden>` +
+    `<span class="wallpaper-progress-track" aria-hidden="true"><span class="wallpaper-progress-fill"></span></span>` +
+    `<span data-role="wallpaper-progress-label">Rendering… 0%</span>` +
+    `</div>` +
     `<div class="preview-surface">` +
     `<div id="preview"></div>` +
     `<svg data-role="orbit-emphasis" aria-hidden="true" focusable="false">` +
@@ -174,6 +183,18 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `Your system asks for reduced motion, so the scene starts paused. ` +
     `Downloaded files always animate.` +
     `</p>` +
+    `<dialog class="wallpaper-guidance-dialog" data-role="wallpaper-guidance-dialog"` +
+    ` aria-labelledby="wallpaper-guidance-title">` +
+    `<div class="wallpaper-guidance-heading">` +
+    `<h2 id="wallpaper-guidance-title">How to apply this wallpaper</h2>` +
+    `<button type="button" data-action="close-wallpaper-guidance">Close</button>` +
+    `</div>` +
+    `<p><strong>Android</strong> — set the exported MP4 as a live wallpaper through a ` +
+    `live-wallpaper app on your device. No conversion is needed.</p>` +
+    `<p><strong>iOS</strong> — iOS does not accept MP4 as a wallpaper. Convert the file to a ` +
+    `Live Photo — a paired JPEG and MOV with a matching Content Identifier — using a ` +
+    `separate app, then apply it.</p>` +
+    `</dialog>` +
     `</section>` +
     `</div>`;
 
@@ -194,6 +215,17 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const wallpaperButton = root.querySelector<HTMLButtonElement>('[data-action="download-wallpaper"]');
   const wallpaperPresetSelect = root.querySelector<HTMLSelectElement>('[data-role="wallpaper-preset"]');
   const wallpaperStatus = root.querySelector<HTMLElement>('[data-role="wallpaper-status"]');
+  const wallpaperProgress = root.querySelector<HTMLElement>('[data-role="wallpaper-progress"]');
+  const wallpaperProgressLabel = root.querySelector<HTMLElement>(
+    '[data-role="wallpaper-progress-label"]',
+  );
+  const wallpaperProgressFill = root.querySelector<HTMLElement>('.wallpaper-progress-fill');
+  const wallpaperGuidanceButton = root.querySelector<HTMLButtonElement>(
+    '[data-action="show-wallpaper-guidance"]',
+  );
+  const wallpaperGuidanceDialog = root.querySelector<HTMLDialogElement>(
+    '[data-role="wallpaper-guidance-dialog"]',
+  );
 
   if (
     !form ||
@@ -204,7 +236,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     !notice ||
     !wallpaperButton ||
     !wallpaperPresetSelect ||
-    !wallpaperStatus
+    !wallpaperStatus ||
+    !wallpaperProgress ||
+    !wallpaperProgressLabel ||
+    !wallpaperGuidanceButton ||
+    !wallpaperGuidanceDialog
   ) {
     throw new Error('Application shell failed to mount its own markup.');
   }
@@ -1255,6 +1291,47 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     wallpaperStatus!.hidden = message === null;
   }
 
+  /**
+   * Advance the wallpaper progress indication (WAL-007). Progress is exposed
+   * through `role="progressbar"` with a numeric `aria-valuenow` and a human
+   * `aria-valuetext`, plus a visible text percentage — never through colour or
+   * an icon alone (UI-008). The decorative track fill is `aria-hidden`.
+   */
+  function renderWallpaperProgress(rendered: number, total: number): void {
+    const percent = total <= 0 ? 0 : Math.round((rendered / total) * 100);
+
+    wallpaperProgress!.hidden = false;
+    wallpaperProgress!.setAttribute('aria-valuemax', String(total));
+    wallpaperProgress!.setAttribute('aria-valuenow', String(rendered));
+    wallpaperProgress!.setAttribute(
+      'aria-valuetext',
+      `Rendering frame ${rendered} of ${total}`,
+    );
+
+    if (wallpaperProgressLabel !== null) {
+      wallpaperProgressLabel.textContent = `Rendering… ${percent}%`;
+    }
+
+    if (wallpaperProgressFill !== null) {
+      wallpaperProgressFill.style.width = `${percent}%`;
+    }
+  }
+
+  /** Retire the progress indication once an export settles (WAL-007). */
+  function hideWallpaperProgress(): void {
+    wallpaperProgress!.hidden = true;
+    wallpaperProgress!.setAttribute('aria-valuenow', '0');
+    wallpaperProgress!.removeAttribute('aria-valuetext');
+
+    if (wallpaperProgressLabel !== null) {
+      wallpaperProgressLabel.textContent = 'Rendering… 0%';
+    }
+
+    if (wallpaperProgressFill !== null) {
+      wallpaperProgressFill.style.width = '0%';
+    }
+  }
+
   /** True while a wallpaper export is in flight (single-render guard). */
   let wallpaperExporting = false;
 
@@ -1289,9 +1366,13 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     wallpaperExporting = true;
     wallpaperButton!.disabled = true;
     showWallpaperStatus(null);
+    renderWallpaperProgress(0, frames);
 
     try {
-      const blob = await encodeWallpaper(svg, preset, { frames });
+      const blob = await encodeWallpaper(svg, preset, {
+        frames,
+        onProgress: (rendered, total) => renderWallpaperProgress(rendered, total),
+      });
       downloadWallpaperBlob(blob, wallpaperFilename(seed, preset));
     } catch (error) {
       // Distinguish an unavailable encoder (WAL-008) from a mid-render failure:
@@ -1302,9 +1383,33 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
           : 'Video wallpaper export failed.',
       );
     } finally {
+      hideWallpaperProgress();
       wallpaperExporting = false;
       wallpaperButton!.disabled = false;
     }
+  });
+
+  // Wallpaper application guidance (WAL-009): a native dialog reachable from
+  // the export action. Out-of-flow, so it contributes nothing to the density
+  // budget; closed via its button or the native Esc.
+  wallpaperGuidanceButton.addEventListener('click', () => {
+    if (!wallpaperGuidanceDialog.open) {
+      wallpaperGuidanceDialog.showModal();
+    }
+  });
+
+  wallpaperGuidanceDialog.addEventListener('click', (event) => {
+    if (event.target === wallpaperGuidanceDialog) {
+      wallpaperGuidanceDialog.close();
+    }
+  });
+
+  const closeWallpaperGuidance = root.querySelector<HTMLButtonElement>(
+    '[data-action="close-wallpaper-guidance"]',
+  );
+
+  closeWallpaperGuidance?.addEventListener('click', () => {
+    wallpaperGuidanceDialog.close();
   });
 
   playbackButton.addEventListener('click', () => {
