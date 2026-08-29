@@ -663,6 +663,15 @@ function composite(
 export interface WallpaperRenderer {
   renderFrame(timeSeconds: number): Promise<HTMLCanvasElement>;
   dispose(): void;
+  /**
+   * Number of `use[data-role="star"]` elements remaining in the per-frame
+   * foreground working copy (WAL-010). Zero when background reuse engaged: the
+   * starfield lives only in the once-rasterized background, so the trimmed
+   * foreground clone carries no stars. Non-zero when reuse is off and the full
+   * document is cloned and rasterized every frame. Exposed so the cost spec can
+   * assert reuse engaged DETERMINISTICALLY rather than by wall-clock timing.
+   */
+  readonly foregroundStarCount: number;
 }
 
 /** Renderer knobs. Loop closure and background reuse are on by default. */
@@ -750,6 +759,8 @@ export function createWallpaperRenderer(
     dispose(): void {
       working.container.remove();
     },
+
+    foregroundStarCount: working.svg.querySelectorAll('use[data-role="star"]').length,
   };
 }
 

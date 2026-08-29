@@ -10,18 +10,24 @@ import { generateScene, type SceneParams } from '../../ts/generator/scene';
  *
  * The default scene at 1080x2400 is rasterized two ways: with background reuse
  * (the production path — `reuseBackground` defaults to true) and without it
- * (`reuseBackground: false`, the pre-optimization path). Two assertions:
+ * (`reuseBackground: false`, the pre-optimization path). Three assertions:
  *
- *   1. PER-FRAME COST — reusing the background must be faster than
- *      re-rasterizing the whole document every frame, and must land under the
- *      116 ms/frame baseline measured in E-012.
- *   2. VISUAL EQUIVALENCE — a frame rendered with reuse must match the same
+ *   1. REUSE ENGAGEMENT (deterministic) — the starfield is rasterized once
+ *      into the cached background and stripped from the per-frame foreground,
+ *      so the reused path's foreground clone carries zero `use[data-role="star"]`
+ *      elements while the non-reused control clones the full starfield. This is
+ *      a STRUCTURAL check, not a timing one: wall-clock `after < before` flaked
+ *      between runs (GC noise made two identical full-render passes differ by
+ *      ~27%), so it cannot be the reuse detector.
+ *   2. PER-FRAME COST — the reused path must land under the 116 ms/frame
+ *      baseline measured in E-012.
+ *   3. VISUAL EQUIVALENCE — a frame rendered with reuse must match the same
  *      frame rendered without it, within anti-aliasing tolerance.
  *
- * Both are measured in the browser (`wallpaper.ts` is DOM-dependent), compiled
- * with rolldown and injected as a blob module, mirroring the other wallpaper
- * specs. The cost baseline was established in Chromium (E-012), so the tests
- * are skipped in the other engines.
+ * All three are measured in the browser (`wallpaper.ts` is DOM-dependent),
+ * compiled with rolldown and injected as a blob module, mirroring the other
+ * wallpaper specs. The cost baseline was established in Chromium (E-012), so
+ * the tests are skipped in the other engines.
  */
 
 const WALLPAPER_PATH = fileURLToPath(new URL('../../ts/app/wallpaper.ts', import.meta.url));
@@ -80,13 +86,21 @@ interface WallpaperModule {
     svg: string,
     preset: unknown,
     options?: { closeLoop?: boolean; reuseBackground?: boolean },
-  ) => { renderFrame(timeSeconds: number): Promise<HTMLCanvasElement>; dispose(): void };
+  ) => {
+    renderFrame(timeSeconds: number): Promise<HTMLCanvasElement>;
+    dispose(): void;
+    foregroundStarCount: number;
+  };
 }
 
 interface CostProbe {
   sceneBytes: number;
   beforeMsPerFrame: number;
   afterMsPerFrame: number;
+  /** `use[data-role="star"]` elements in the non-reused foreground clone. */
+  beforeForegroundStarCount: number;
+  /** `use[data-role="star"]` elements in the reused foreground clone. */
+  afterForegroundStarCount: number;
 }
 
 async function measureCost(page: import('@playwright/test').Page): Promise<CostProbe> {
@@ -102,8 +116,14 @@ async function measureCost(page: import('@playwright/test').Page): Promise<CostP
 
       const preset = { id: 'android', width: 1080, height: 2400 };
 
-      async function measure(reuseBackground: boolean): Promise<number> {
+      async function measure(
+        reuseBackground: boolean,
+      ): Promise<{ msPerFrame: number; foregroundStarCount: number }> {
         const renderer = module.createWallpaperRenderer(scene, preset, { reuseBackground });
+
+        // The star count is fixed at creation: background reuse strips the
+        // starfield from the live working copy once, before any frame renders.
+        const foregroundStarCount = renderer.foregroundStarCount;
 
         // Warm up: prime the rasterizer/JIT (and, for the reuse path, the
         // one-time background rasterization) so the timed frames measure
@@ -123,24 +143,29 @@ async function measureCost(page: import('@playwright/test').Page): Promise<CostP
         const elapsed = performance.now() - startedAt;
         renderer.dispose();
 
-        return elapsed / frames;
+        return { msPerFrame: elapsed / frames, foregroundStarCount };
       }
 
-      // Order matters. The full-document path has a slow, multi-second warm-up
-      // (measured cold start above), so it is timed LAST: by then the engine is
-      // fully warm and the full path is at steady state. A no-op reuse would
-      // therefore make `after ≈ before` — never materially faster — so the
-      // relative assertion below cannot pass on warm-up drift alone.
-      const afterMsPerFrame = await measure(true);
-      const beforeMsPerFrame = await measure(false);
+      // Order matters for the timing figures. The full-document path has a
+      // slow, multi-second warm-up (measured cold start above), so it is timed
+      // LAST: by then the engine is fully warm and the full path is at steady
+      // state. The structural star counts are independent of order.
+      const after = await measure(true);
+      const before = await measure(false);
 
-      return { sceneBytes: scene.length, beforeMsPerFrame, afterMsPerFrame };
+      return {
+        sceneBytes: scene.length,
+        beforeMsPerFrame: before.msPerFrame,
+        afterMsPerFrame: after.msPerFrame,
+        beforeForegroundStarCount: before.foregroundStarCount,
+        afterForegroundStarCount: after.foregroundStarCount,
+      };
     },
     { src: source, scene: DEFAULT_SCENE, frames: TIMING_FRAMES },
   );
 }
 
-test('background reuse cuts per-frame cost below the baseline (WAL-010)', async ({ page }, testInfo) => {
+test('background reuse engages and stays below the baseline (WAL-010)', async ({ page }, testInfo) => {
   test.skip(testInfo.project.name !== 'chromium', 'Cost baseline is established in Chromium (E-012).');
 
   const result = await measureCost(page);
@@ -149,17 +174,30 @@ test('background reuse cuts per-frame cost below the baseline (WAL-010)', async 
     type: 'wallpaper per-frame cost',
     description:
       `${testInfo.project.name}: scene ${result.sceneBytes}B, ` +
-      `without reuse ${result.beforeMsPerFrame.toFixed(1)} ms/frame, ` +
-      `with reuse ${result.afterMsPerFrame.toFixed(1)} ms/frame`,
+      `without reuse ${result.beforeMsPerFrame.toFixed(1)} ms/frame ` +
+      `(${result.beforeForegroundStarCount} stars), ` +
+      `with reuse ${result.afterMsPerFrame.toFixed(1)} ms/frame ` +
+      `(${result.afterForegroundStarCount} stars)`,
   });
 
-  // Reuse must be materially cheaper than re-rasterizing the whole document.
-  // The margin (25%) is far larger than warm-up or timing noise, so a no-op
-  // reuse path (which would leave `after ≈ before`) cannot sneak through.
+  // DETERMINISTIC reuse engagement. The starfield is rasterized once into the
+  // cached background and stripped from the live working copy, so the reused
+  // path's per-frame foreground clone carries zero stars while the non-reused
+  // control clones the full starfield every frame. This is structural, not
+  // wall-clock timing (which flaked ~27% between identical full-render passes),
+  // so a reuse path that silently falls back to full re-rasterization fails
+  // this assertion regardless of GC noise.
   expect(
-    result.afterMsPerFrame,
-    `${testInfo.project.name}: background reuse was not materially faster (${result.afterMsPerFrame.toFixed(1)} vs ${result.beforeMsPerFrame.toFixed(1)} ms/frame)`,
-  ).toBeLessThan(result.beforeMsPerFrame * 0.75);
+    result.afterForegroundStarCount,
+    `${testInfo.project.name}: reuse did not engage — the reused foreground still contains ${result.afterForegroundStarCount} star(s)`,
+  ).toBe(0);
+  expect(
+    result.beforeForegroundStarCount,
+    `${testInfo.project.name}: the non-reused control cloned no starfield (expected > 0 stars)`,
+  ).toBeGreaterThan(0);
+
+  // WAL-010 requirement (E-012): the reused per-frame cost stays below the
+  // 116 ms/frame baseline.
   expect(
     result.afterMsPerFrame,
     `${testInfo.project.name}: reused per-frame cost ${result.afterMsPerFrame.toFixed(1)} ms is not below the ${BASELINE_MS_PER_FRAME} ms baseline`,
