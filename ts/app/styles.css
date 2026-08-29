@@ -768,6 +768,93 @@ input[aria-invalid="true"] {
   color: var(--chrome-text-muted);
 }
 
+/* Wallpaper export progress (WAL-007): a text + ARIA progressbar, never colour
+   or icon alone (UI-008). Hidden while idle so it contributes no height to the
+   control-deck budget; shown only during an in-flight export. */
+[data-role="wallpaper-progress"] {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin: var(--space-2) 0 0;
+  padding: var(--space-2) var(--space-3);
+  border-left: 2px solid var(--chrome-primary-action);
+  font-size: 0.85rem;
+  color: var(--chrome-text-muted);
+}
+
+[data-role="wallpaper-progress"][hidden] {
+  display: none;
+}
+
+.wallpaper-progress-track {
+  flex: 1 1 auto;
+  min-width: 40px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--chrome-line-strong);
+  overflow: hidden;
+}
+
+.wallpaper-progress-fill {
+  display: block;
+  width: 0;
+  height: 100%;
+  background: var(--chrome-primary-action);
+}
+
+/* Wallpaper application guidance (WAL-009): honest Android/iOS instructions in
+   a native dialog reachable from the export action. Out-of-flow (display:none
+   until opened), so it contributes nothing to the density budget. */
+.wallpaper-guidance-dialog {
+  width: min(28rem, calc(100vw - 2 * var(--space-4)));
+  max-height: calc(100vh - 2 * var(--space-4));
+  overflow-y: auto;
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--chrome-line-strong);
+  border-top: 2px solid var(--chrome-primary-action);
+  border-radius: var(--radius-lg);
+  background: var(--chrome-control);
+  color: var(--chrome-text);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, 0.5);
+}
+
+.wallpaper-guidance-dialog::backdrop {
+  background: var(--chrome-backdrop);
+}
+
+.wallpaper-guidance-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  margin-bottom: var(--space-2);
+}
+
+.wallpaper-guidance-heading h2 {
+  margin: 0;
+  font-family: var(--font-heading);
+  font-size: 1rem;
+  letter-spacing: 0.04em;
+}
+
+.wallpaper-guidance-dialog p {
+  margin: var(--space-2) 0 0;
+  font-size: 0.85rem;
+  color: var(--chrome-text-muted);
+}
+
+.wallpaper-guidance-dialog strong {
+  color: var(--chrome-text);
+  font-weight: 650;
+}
+
+/* Guidance trigger (WAL-009): a quiet "How to apply" affordance beside the
+   stage title. It lives OUTSIDE the actions row so it shares the title's line
+   on narrow screens and costs nothing against the mobile density budget. */
+.wallpaper-guidance-trigger {
+  color: var(--chrome-primary-action);
+}
+
 /* ------------------------------------------------------------------ focus */
 
 :focus-visible {
