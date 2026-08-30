@@ -181,7 +181,19 @@ interface FieldOptions {
   compact?: boolean;
   /** Full accessible name; overrides the concise visible label for AT. */
   ariaLabel?: string;
+  /**
+   * Reference length an authored percentage is measured against (CX-022).
+   * Supplying it marks the field proportional: a `%` suffix is shown and the
+   * reference is announced through `aria-describedby`.
+   */
+  reference?: 'scene' | 'planet';
 }
+
+/** What a proportional control's percentage is a share of (CX-022). */
+const REFERENCE_TEXT = {
+  scene: 'percent of the scene radius, the distance from the centre to the nearest canvas edge',
+  planet: 'percent of the planet radius',
+} as const;
 
 /**
  * A single parameter field: label, editable value, and its error slot.
@@ -202,9 +214,20 @@ function field(
   const classes = ['field', options.compact === true ? 'field--compact' : '']
     .filter((name) => name !== '')
     .join(' ');
-  const ariaLabel = options.ariaLabel === undefined
+  const reference = options.reference;
+  const describedBy = reference === undefined
+    ? `${id}-error`
+    : `${id}-unit ${id}-error`;
+  // The unit belongs in the accessible name too: a screen-reader user editing
+  // "Distance" must hear that it is a percentage, not a pixel count.
+  const accessibleName = options.ariaLabel === undefined
+    ? undefined
+    : reference === undefined
+      ? options.ariaLabel
+      : `${options.ariaLabel} in percent`;
+  const ariaLabel = accessibleName === undefined
     ? ''
-    : ` aria-label="${escapeAttribute(options.ariaLabel)}"`;
+    : ` aria-label="${escapeAttribute(accessibleName)}"`;
 
   let numeric: string;
   let range = '';
@@ -216,7 +239,7 @@ function field(
     numeric =
       `<input id="${id}" data-control="${control}" type="number"` +
       ` min="${min}" max="${max}" step="${step}" value="${escapeAttribute(value)}"` +
-      `${ariaLabel} aria-describedby="${id}-error"/>`;
+      `${ariaLabel} aria-describedby="${describedBy}"/>`;
 
     range =
       `<input class="field-range" data-range-for="${id}" type="range"` +
@@ -225,13 +248,18 @@ function field(
   } else {
     numeric =
       `<input id="${id}" data-control="${control}" type="text" inputmode="decimal"` +
-      ` value="${escapeAttribute(value)}"${ariaLabel} aria-describedby="${id}-error"/>`;
+      ` value="${escapeAttribute(value)}"${ariaLabel} aria-describedby="${describedBy}"/>`;
   }
+
+  const unit = reference === undefined
+    ? ''
+    : `<span id="${id}-unit" class="field-unit" data-reference="${reference}"` +
+      ` title="${escapeAttribute(REFERENCE_TEXT[reference])}">%</span>`;
 
   return (
     `<div class="${classes}">` +
     `<label id="${id}-label" for="${id}">${glyph}<span>${label}</span></label>` +
-    `<span class="field-value">${range}${numeric}</span>` +
+    `<span class="field-value">${range}${numeric}${unit}</span>` +
     `<span id="${id}-error" class="field-error"></span>` +
     `</div>`
   );
@@ -273,11 +301,13 @@ function moonGroup(planet: RawPlanetInput, index: number): string {
         glyph: 'moon',
         compact: true,
         ariaLabel: 'Moon size',
+        reference: 'planet',
       }) +
       field(`planet-${index}-moon-distance`, 'Distance', 'moonDistance', moon.distance, {
         glyph: 'distance',
         compact: true,
         ariaLabel: 'Moon distance',
+        reference: 'planet',
       }) +
       field(`planet-${index}-moon-period`, 'Period', 'moonPeriod', moon.period, {
         glyph: 'moonPeriod',
@@ -321,21 +351,27 @@ function orbitGroup(planet: RawPlanetInput, index: number): string {
     ? field(`planet-${index}-orbit-left`, 'Left', 'orbitLeft', distance.left, {
         glyph: 'distance',
         ariaLabel: 'Left orbital distance',
+        reference: 'scene',
       }) +
       field(`planet-${index}-orbit-top`, 'Top', 'orbitTop', distance.top, {
         glyph: 'distance',
         ariaLabel: 'Top orbital distance',
+        reference: 'scene',
       }) +
       field(`planet-${index}-orbit-right`, 'Right', 'orbitRight', distance.right, {
         glyph: 'distance',
         ariaLabel: 'Right orbital distance',
+        reference: 'scene',
       }) +
       field(`planet-${index}-orbit-bottom`, 'Bottom', 'orbitBottom', distance.bottom, {
         glyph: 'distance',
         ariaLabel: 'Bottom orbital distance',
+        reference: 'scene',
       })
     : field(`planet-${index}-distance`, 'Orbital distance', 'planetDistance', scalarValue, {
         glyph: 'distance',
+        ariaLabel: 'Orbital distance',
+        reference: 'scene',
       });
 
   return modeMarkup + controls;
@@ -438,8 +474,8 @@ function beltGroup(input: RawSceneControls, open: boolean): string {
 function planetSummary(planet: RawPlanetInput, index: number): string {
   const hasMoon = planet.moon !== false;
   const distance = distanceText(planet.distance);
-  const sizeDescription = `Planet size: ${planet.size}`;
-  const orbitDescription = `Orbital distance: ${distance}`;
+  const sizeDescription = `Planet size: ${planet.size}% of the scene radius`;
+  const orbitDescription = `Orbital distance: ${distance}% of the scene radius`;
   const moonBadge = hasMoon
     ? `<span class="summary-moon">${icon('moon', { label: 'Has a moon' })}</span>`
     : '';
@@ -451,10 +487,10 @@ function planetSummary(planet: RawPlanetInput, index: number): string {
     `<span class="summary-facts">` +
     `<span class="summary-fact" data-role="summary-size"` +
     ` title="${escapeAttribute(sizeDescription)}" aria-label="${escapeAttribute(sizeDescription)}">` +
-    `Size ${escapeAttribute(planet.size)}</span>` +
+    `Size ${escapeAttribute(planet.size)}%</span>` +
     `<span class="summary-fact" data-role="summary-distance"` +
     ` title="${escapeAttribute(orbitDescription)}" aria-label="${escapeAttribute(orbitDescription)}">` +
-    `Orbit ${escapeAttribute(distance)}</span>` +
+    `Orbit ${escapeAttribute(distance)}%</span>` +
     moonBadge +
     `</span>` +
     `</summary>`
@@ -482,7 +518,11 @@ function planetDialog(planet: RawPlanetInput, index: number, ringOpen: boolean):
     `</div>` +
     `<div class="dialog-preview" data-role="planet-preview"></div>` +
     `<div class="dialog-body">` +
-    field(`planet-${index}-size`, 'Size', 'planetSize', planet.size, { glyph: 'size' }) +
+    field(`planet-${index}-size`, 'Size', 'planetSize', planet.size, {
+      glyph: 'size',
+      ariaLabel: 'Planet size',
+      reference: 'scene',
+    }) +
     moonGroup(planet, index) +
     ringGroup(planet, index, ringOpen) +
     `</div>` +

@@ -120,7 +120,8 @@ test.describe('playback control', () => {
     await expect(dialog).toBeVisible();
 
     const size = dialog.locator('[data-control="planetSize"]');
-    await size.fill('60');
+    // 20% of the 300-unit scene radius on the default 600x600 canvas.
+    await size.fill('20');
     await size.blur();
     await expect(page.locator('#preview [data-role="planet-body"]').first()).toHaveAttribute('r', '60');
 

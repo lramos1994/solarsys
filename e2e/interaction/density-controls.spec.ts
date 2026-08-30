@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page } from '@playwright/test';
+import { BOUNDS, stepOf } from '../../ts/app/validation';
 
 /**
  * Collapsible instruments and the new control affordances
@@ -10,15 +11,19 @@ import { expect, test, type Locator, type Page } from '@playwright/test';
  * user's raw value rather than a clamped one.
  */
 
-/** BOUNDS as declared by `ts/app/validation.ts`, mirrored for assertions. */
-const BOUNDS = {
-  canvasWidth: { min: 100, max: 1500 },
-  canvasHeight: { min: 100, max: 1500 },
-  planetSize: { min: 1, max: 100 },
-  moonSize: { min: 1, max: 40 },
-  moonDistance: { min: 0, max: 1000 },
-  moonPeriod: { min: 1, max: 120 },
-} as const;
+/**
+ * Bounds are IMPORTED from the single shared definition, never mirrored here
+ * (CTL-015). A local copy silently passed while the real bounds changed, which
+ * is exactly the failure this assertion exists to catch.
+ */
+const CHECKED_BOUNDS = [
+  'canvasWidth',
+  'canvasHeight',
+  'planetSize',
+  'moonSize',
+  'moonDistance',
+  'moonPeriod',
+] as const;
 
 function group(page: Page, index: number): Locator {
   return page.locator(`#controls [data-planet="${index}"]`);
@@ -208,17 +213,17 @@ test.describe('collapsed summary (CD-003)', () => {
     const summary = group(page, 1).locator(':scope > summary');
 
     await expect(summary).toContainText('Planet 2');
-    await expect(summary.locator('[data-role="summary-size"]')).toContainText('18');
-    await expect(summary.locator('[data-role="summary-distance"]')).toContainText('190');
+    await expect(summary.locator('[data-role="summary-size"]')).toContainText('6%');
+    await expect(summary.locator('[data-role="summary-distance"]')).toContainText('63%');
   });
 
   test('the summary reflects an edited value', async ({ page }) => {
     const dialog = await openPlanetDialog(page, 1);
-    await setValue(dialog.locator('[data-control="planetSize"]'), '42');
+    await setValue(dialog.locator('[data-control="planetSize"]'), '21');
     await dialog.locator('[data-action="close-planet-dialog"]').click();
     await collapse(page, 1);
 
-    await expect(group(page, 1).locator('[data-role="summary-size"]')).toContainText('42');
+    await expect(group(page, 1).locator('[data-role="summary-size"]')).toContainText('21%');
   });
 
   test('an abbreviated value carries an accessible description (CX-021)', async ({ page }) => {
@@ -271,9 +276,11 @@ test.describe('an error never hides inside a collapsed group (CD-004)', () => {
       'aria-invalid',
       'true',
     );
+    // A proportional control also points at its unit description (CX-022);
+    // the error target must still be present.
     await expect(reopened.locator('[data-control="planetSize"]')).toHaveAttribute(
       'aria-describedby',
-      'planet-1-size-error',
+      'planet-1-size-unit planet-1-size-error',
     );
     await expect(reopened.locator('#planet-1-size-error')).toBeVisible();
   });
@@ -315,11 +322,14 @@ test.describe('paired range and exact entry (CX-001)', () => {
   });
 
   test('range endpoints match the declared bounds', async ({ page }) => {
-    for (const [control, bound] of Object.entries(BOUNDS)) {
+    for (const control of CHECKED_BOUNDS) {
+      const bound = BOUNDS[control];
+      const step = String(stepOf(control));
       const numeric = page.locator(`[data-control="${control}"]`).first();
 
       await expect(numeric).toHaveAttribute('min', String(bound.min));
       await expect(numeric).toHaveAttribute('max', String(bound.max));
+      await expect(numeric).toHaveAttribute('step', step);
 
       const id = await numeric.getAttribute('id');
       const range = page.locator(`[data-range-for="${id}"]`);
@@ -327,6 +337,7 @@ test.describe('paired range and exact entry (CX-001)', () => {
       if ((await range.count()) > 0) {
         await expect(range).toHaveAttribute('min', String(bound.min));
         await expect(range).toHaveAttribute('max', String(bound.max));
+        await expect(range).toHaveAttribute('step', step);
       }
     }
   });
@@ -416,9 +427,10 @@ test.describe('paired range and exact entry (CX-001)', () => {
     const moonBody = page.locator('#preview [data-role="planet"]').nth(1)
       .locator(':scope > [data-role="moon"] [data-role="moon-body"]');
 
-    await sizeRange.fill('8');
-    await expect(size).toHaveValue('8');
-    await expect(moonBody).toHaveAttribute('r', '8');
+    await sizeRange.fill('40');
+    await expect(size).toHaveValue('40');
+    // 40% of planet 2's 18-unit radius.
+    await expect(moonBody).toHaveAttribute('r', '7.2');
 
     const period = dialog.locator('[data-control="moonPeriod"]');
     const periodId = await period.getAttribute('id');
@@ -494,8 +506,8 @@ test.describe('moon switch (CX-012)', () => {
     await toggleControl.focus();
     await page.keyboard.press('Space');
 
-    await expect(dialog.locator('[data-control="moonSize"]')).toHaveValue('5');
-    await expect(dialog.locator('[data-control="moonDistance"]')).toHaveValue('32');
+    await expect(dialog.locator('[data-control="moonSize"]')).toHaveValue('28');
+    await expect(dialog.locator('[data-control="moonDistance"]')).toHaveValue('180');
     await expect(dialog.locator('[data-control="moonPeriod"]')).toHaveValue('15');
     await expect(page.locator('#preview [data-role="moon"]')).toHaveCount(2);
   });

@@ -149,10 +149,11 @@ test.describe('planet size', () => {
     const before = await radius.getAttribute('r');
 
     const dialog = await openPlanetDialog(page, 0);
-    await setValue(dialog.locator('[data-control="planetSize"]'), '30');
+    await setValue(dialog.locator('[data-control="planetSize"]'), '20');
 
     await expect(radius).not.toHaveAttribute('r', before ?? '');
-    expect(Number(await radius.getAttribute('r'))).toBe(30);
+    // 20% of the 300-unit scene radius on the default 600x600 canvas.
+    expect(Number(await radius.getAttribute('r'))).toBe(60);
   });
 });
 
@@ -173,7 +174,7 @@ test.describe('orbital distance forms (CTL-002)', () => {
       await expect(exact).toBeVisible();
       expect(id).toBeTruthy();
       await expect(planet.locator(`[data-range-for="${id}"]`)).toBeVisible();
-      await expect(exact).toHaveValue('110');
+      await expect(exact).toHaveValue('37');
     }
   });
 
@@ -200,10 +201,10 @@ test.describe('orbital distance forms (CTL-002)', () => {
 
     await planet.locator('[data-orbit-mode="custom"]').check();
 
-    await setValue(planet.locator('[data-control="orbitLeft"]'), '200');
-    await setValue(planet.locator('[data-control="orbitTop"]'), '60');
-    await setValue(planet.locator('[data-control="orbitRight"]'), '200');
-    await setValue(planet.locator('[data-control="orbitBottom"]'), '60');
+    await setValue(planet.locator('[data-control="orbitLeft"]'), '67');
+    await setValue(planet.locator('[data-control="orbitTop"]'), '20');
+    await setValue(planet.locator('[data-control="orbitRight"]'), '67');
+    await setValue(planet.locator('[data-control="orbitBottom"]'), '20');
 
     const numbers =
       (await orbitPathData(page, 0)).match(/-?\d+(\.\d+)?/g)?.map(Number) ?? [];
@@ -212,20 +213,21 @@ test.describe('orbital distance forms (CTL-002)', () => {
     const width = Math.max(...xs) - Math.min(...xs);
     const height = Math.max(...ys) - Math.min(...ys);
 
-    // 400 wide against 120 tall: the asymmetry must survive into the path.
-    expect(width).toBeCloseTo(400, 6);
+    // 67% and 20% of the 300-unit scene radius: 402 wide against 120 tall.
+    // The asymmetry must survive into the path.
+    expect(width).toBeCloseTo(402, 6);
     expect(height).toBeCloseTo(120, 6);
   });
 
   test('switching between the two forms updates the same orbit', async ({ page }) => {
     const planet = page.locator('#controls [data-planet]').first();
 
-    await setValue(planet.locator('[data-control="planetDistance"]'), '150');
+    await setValue(planet.locator('[data-control="planetDistance"]'), '50');
     const circular = await orbitPathData(page, 0);
 
     await planet.locator('[data-orbit-mode="custom"]').check();
-    await setValue(planet.locator('[data-control="orbitTop"]'), '40');
-    await setValue(planet.locator('[data-control="orbitBottom"]'), '40');
+    await setValue(planet.locator('[data-control="orbitTop"]'), '13');
+    await setValue(planet.locator('[data-control="orbitBottom"]'), '13');
     const asymmetric = await orbitPathData(page, 0);
 
     expect(asymmetric).not.toBe(circular);
@@ -248,7 +250,7 @@ test.describe('planet composition (CTL-003)', () => {
     await expect(planets).toHaveCount(4);
     await expect(orbits).toHaveCount(4);
     await expect(planets.nth(3).locator('[data-control="planetSize"]')).toHaveValue('10');
-    await expect(planets.nth(3).locator('[data-control="planetDistance"]')).toHaveValue('150');
+    await expect(planets.nth(3).locator('[data-control="planetDistance"]')).toHaveValue('50');
   });
 
   test('removes the selected planet, its orbit, and its moon', async ({ page }) => {
@@ -330,15 +332,17 @@ test.describe('moon configuration (CTL-004)', () => {
     const dialog = await openPlanetDialog(page, 1);
     const renderedPlanet = page.locator('#preview [data-role="planet"]').nth(1);
 
-    await setValue(dialog.locator('[data-control="moonSize"]'), '8');
-    await setValue(dialog.locator('[data-control="moonDistance"]'), '40');
+    // Planet 2's default size is 6% of the 300-unit scene radius: an 18-unit
+    // radius. Moon values are percentages OF THAT.
+    await setValue(dialog.locator('[data-control="moonSize"]'), '50');
+    await setValue(dialog.locator('[data-control="moonDistance"]'), '200');
     await setValue(dialog.locator('[data-control="moonPeriod"]'), '30');
 
     await expect(
       renderedPlanet.locator(':scope > [data-role="moon"] [data-role="moon-body"]'),
-    ).toHaveAttribute('r', '8');
+    ).toHaveAttribute('r', '9');
     await expect(renderedPlanet.locator(':scope > [data-role="moon-orbit"]'))
-      .toHaveAttribute('d', /^M -40 0/);
+      .toHaveAttribute('d', /^M -36 0/);
     await expect(renderedPlanet.locator(':scope > [data-role="moon"] > animateMotion'))
       .toHaveAttribute('dur', '30s');
   });

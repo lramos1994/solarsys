@@ -754,10 +754,16 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
       input.setAttribute('aria-invalid', 'true');
 
-      const describedBy = input.getAttribute('aria-describedby');
-      const slot = describedBy
-        ? form!.querySelector<HTMLElement>(`#${describedBy}`)
-        : null;
+      // `aria-describedby` is a token LIST: a proportional control also points
+      // at its unit description (CX-022). Take the error slot specifically, or
+      // the message silently lands nowhere and the field looks valid.
+      const describedBy = input.getAttribute('aria-describedby') ?? '';
+      const errorId = describedBy
+        .split(/\s+/)
+        .find((token) => token.endsWith('-error'));
+      const slot = errorId === undefined
+        ? null
+        : form!.querySelector<HTMLElement>(`#${errorId}`);
 
       if (slot !== null) {
         slot.textContent = error.message;
@@ -793,9 +799,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
       const distance = scope.querySelector<HTMLElement>('[data-role="summary-distance"]');
 
       if (size !== null) {
-        size.textContent = `Size ${planet.size}`;
-        size.setAttribute('title', `Planet size: ${planet.size}`);
-        size.setAttribute('aria-label', `Planet size: ${planet.size}`);
+        const description = `Planet size: ${planet.size}% of the scene radius`;
+
+        size.textContent = `Size ${planet.size}%`;
+        size.setAttribute('title', description);
+        size.setAttribute('aria-label', description);
       }
 
       if (distance !== null) {
@@ -816,9 +824,11 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
           text = `${Math.min(...extents)}–${Math.max(...extents)}`;
         }
 
-        distance.textContent = `Orbit ${text}`;
-        distance.setAttribute('title', `Orbital distance: ${text}`);
-        distance.setAttribute('aria-label', `Orbital distance: ${text}`);
+        const description = `Orbital distance: ${text}% of the scene radius`;
+
+        distance.textContent = `Orbit ${text}%`;
+        distance.setAttribute('title', description);
+        distance.setAttribute('aria-label', description);
       }
     });
 

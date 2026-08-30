@@ -57,13 +57,16 @@ test.describe('debounced regeneration (CX-017)', () => {
       probe.__observer!.observe(preview!, { childList: true });
     });
 
-    // 30 synchronous `input` events on the planet-size range, as a fast drag.
+    // A burst of synchronous `input` events on the planet-size range, as a
+    // fast drag.
     await page.evaluate(() => {
       const range = document.querySelector<HTMLInputElement>(
         '#controls [data-range-for="planet-0-size"]',
       );
 
-      for (let value = 10; value < 40; value += 1) {
+      // Planet size is 1..25 percent of the scene radius; a value outside the
+      // range is clamped by the native range widget and would emit no change.
+      for (let value = 1; value < 25; value += 1) {
         range!.value = String(value);
         range!.dispatchEvent(new Event('input', { bubbles: true }));
       }
@@ -72,17 +75,18 @@ test.describe('debounced regeneration (CX-017)', () => {
     // The paired exact figure updates immediately, before the debounce fires.
     await expect(
       page.locator('[data-role="planet-dialog"][data-index="0"] [data-control="planetSize"]'),
-    ).toHaveValue('39');
+    ).toHaveValue('24');
 
     // Let the debounce fire and settle.
     await page.waitForTimeout(400);
 
     // One regeneration replaces the single `<svg>` child, producing one
-    // child-list record. A per-event regeneration would be 30 records here.
+    // child-list record. A per-event regeneration would be 24 records here.
     expect(await regenCount(page)).toBeLessThanOrEqual(2);
 
     // The settled value applied to the preview.
     const body = page.locator('#preview [data-role="planet-body"]').first();
-    await expect(body).toHaveAttribute('r', '39');
+    // 24% of the 300-unit scene radius on the default 600x600 canvas.
+    await expect(body).toHaveAttribute('r', '72');
   });
 });

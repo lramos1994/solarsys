@@ -465,9 +465,9 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     const expected = {
       canvasWidth: { min: '100', max: '1500' },
       canvasHeight: { min: '100', max: '1500' },
-      // CTL-013: orbital distance is capped at 400 in the UI, mirroring the
-      // generator's authored bound; the slider reads it from the same BOUNDS.
-      planetDistance: { min: '0', max: '400' },
+      // CTL-015: orbital distance is a percentage of the scene radius,
+      // 0..120; the slider reads it from the same shared BOUNDS.
+      planetDistance: { min: '0', max: '120' },
     };
 
     for (const [control, bounds] of Object.entries(expected)) {
@@ -489,7 +489,12 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     );
     await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
       'max',
-      '100',
+      '25',
+    );
+    // Planet size is authored in half-percent increments (CTL-015).
+    await expect(page.locator('[data-control="planetSize"]').first()).toHaveAttribute(
+      'step',
+      '0.5',
     );
   });
 
@@ -503,10 +508,10 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
 
     await planet.locator('[data-orbit-mode="custom"]').check();
 
-    await planet.locator('[data-control="orbitLeft"]').fill('200');
-    await planet.locator('[data-control="orbitTop"]').fill('60');
-    await planet.locator('[data-control="orbitRight"]').fill('200');
-    await planet.locator('[data-control="orbitBottom"]').fill('60');
+    await planet.locator('[data-control="orbitLeft"]').fill('67');
+    await planet.locator('[data-control="orbitTop"]').fill('20');
+    await planet.locator('[data-control="orbitRight"]').fill('67');
+    await planet.locator('[data-control="orbitBottom"]').fill('20');
     await planet.locator('[data-control="orbitBottom"]').blur();
 
     // A four-value distance is accepted (no error), preserving CTL-002.
@@ -600,8 +605,11 @@ test.describe('inline errors (CX-004, CX-005)', () => {
 
     await expect(size).toHaveAttribute('aria-invalid', 'true');
 
+    // `aria-describedby` is a token list: a proportional control also points
+    // at its unit description (CX-022).
     const describedBy = await size.getAttribute('aria-describedby');
-    const message = await dialog.locator(`#${describedBy}`).textContent();
+    const errorId = (describedBy ?? '').split(/\s+/).find((token) => token.endsWith('-error'));
+    const message = await dialog.locator(`#${errorId}`).textContent();
 
     expect(message).toContain('planet 2');
   });

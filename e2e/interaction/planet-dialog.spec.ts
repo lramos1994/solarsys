@@ -104,12 +104,13 @@ test.describe('planet dialog lifecycle (CX-020)', () => {
     const before = await sceneBody.getAttribute('r');
 
     const sizeInput = dialog.locator('[data-control="planetSize"]');
-    await sizeInput.fill('30');
+    await sizeInput.fill('20');
     await sizeInput.blur();
 
+    // 20% of the 300-unit scene radius on the default 600x600 canvas.
     await expect(sceneBody).not.toHaveAttribute('r', before ?? '');
-    await expect(sceneBody).toHaveAttribute('r', '30');
-    await expect(previewBody).toHaveAttribute('r', '30');
+    await expect(sceneBody).toHaveAttribute('r', '60');
+    await expect(previewBody).toHaveAttribute('r', '60');
   });
 
   test('a rejected edit keeps the last valid scene and associates an inline error', async ({ page }) => {
@@ -144,7 +145,7 @@ test.describe('planet dialog lifecycle (CX-020)', () => {
 
     // The recorded index still targets the same planet: planet 0's size edit
     // remains inside the recreated dialog, not a shifted one.
-    await expect(dialogFor(page, 0).locator('[data-control="planetSize"]')).toHaveValue('12');
+    await expect(dialogFor(page, 0).locator('[data-control="planetSize"]')).toHaveValue('4');
   });
 
   test('removing the open planet closes its dialog and leaves no dangling state', async ({ page }) => {
