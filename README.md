@@ -9,7 +9,9 @@ network request involved in generating, previewing, or downloading a scene.
 
 ## Requirements
 
-- Node.js and npm
+- Node.js 20.19+ or 22.12+ (the `engines` contract in `package.json`; `.nvmrc`
+  pins the Node 22 line for nvm users)
+- npm
 
 ## Setup
 
@@ -32,23 +34,28 @@ is sufficient; nothing else is required.
 
 The interface exposes every user-owned parameter:
 
-- canvas width and height
-- per-planet size and orbital distance
-- orbital distance as a single value (circular) or four comma-separated values
-  (`left,top,right,bottom`, asymmetric)
-- per-planet moon: enable/disable, size, distance, and period (default 15s)
+- canvas width and height, plus quick presets
+- per-planet orbital distance: one value (circular) or, in Custom mode, four
+  directional values (`left,top,right,bottom`, asymmetric)
+- per-planet size, moon (enable/disable, size, distance, and period, default
+  15s), and ring (enable/disable, type, size, and inclination) — edited in
+  each planet's dialog
+- scene-level asteroid belt: enable/disable, type, asteroid count, inner and
+  outer radius (as a percentage of the orbit), asteroid size, and rotation
+  period
 - palette: `Random` (default) or one of Aurora, Ember, Abissal, Amethyst,
   Verdant, Mono
-- seed: displayed, editable, and regenerable
 
 A **Pause/Play** control stops and resumes the previewed animation. If your
 system asks for reduced motion, the scene starts paused and explains why; press
 play to start it. Downloaded files always animate regardless.
 
-Values that the generator owns are deliberately not exposed as controls: ring
-presence and tilt, planet orbital periods, star counts and positions, asteroid
-belt layout and rotation, comet count and paths, and planet surface detail.
-They are derived from the seed, so a new seed changes them.
+The scene seed is a fixed, non-exposed constant: the application never shows
+it, never lets you edit it, and never re-randomizes it. Values the generator
+derives from that seed — planet orbital periods, star counts and positions,
+ring colours, individual asteroid placement and rotation, comet count and
+paths, and planet surface detail — are stable but deliberately not exposed as
+controls.
 
 Invalid input is rejected with a message naming the control and its accepted
 range. Rejections appear inline at the offending control and in a screen-reader
@@ -56,9 +63,11 @@ summary; nothing is silently clamped, and the last valid scene stays on screen.
 
 ### Determinism and sharing
 
-A scene is fully determined by its parameters plus its seed. Entering the same
-seed with the same parameters reproduces a byte-identical SVG, across reloads,
-sessions, and machines.
+A scene is fully determined by its parameters plus the seed. Because the
+application always generates from the same fixed seed, identical parameters
+reproduce a byte-identical SVG across reloads, sessions, and machines. The
+generator's `(params, seed)` API stays explicit, so the determinism suites can
+pin seeds directly.
 
 ### Download
 
@@ -88,12 +97,13 @@ npm run test:browser       # Chromium, Firefox, WebKit render + animate
 npm run test:interaction   # control surface, validation, export
 npm run test:reduced-motion
 npm run test:presentation  # chrome: theme, layout, widgets, inline errors, focus
-npm run test:all           # headless + browser + interaction
+npm run test:density       # measured vertical budget of the control deck
+npm run test:all           # headless + browser + interaction + density + reduced-motion + presentation
 npm run typecheck          # tsc, strict
 ```
 
-Browser and interaction suites build the application and run Playwright against
-the served static output.
+The browser, interaction, density, reduced-motion, and presentation suites
+build the application and run Playwright against the served static output.
 
 ## Architecture
 

@@ -17,7 +17,10 @@
     "test:reduced-motion": "playwright test e2e/reduced-motion --project=chromium-reduced-motion",
     "test:presentation": "playwright test e2e/presentation --project=chromium --project=mobile-chrome --project=mobile-safari",
     "test:density": "playwright test e2e/density --project=chromium --project=mobile-chrome",
-    "test:all": "npm run test && npm run test:browser && npm run test:interaction && npm run test:density"
+    "test:all": "npm run test && npm run test:browser && npm run test:interaction && npm run test:density && npm run test:reduced-motion && npm run test:presentation"
+  },
+  "engines": {
+    "node": "^20.19.0 || >=22.12.0"
   },
   "repository": {
     "type": "git",
@@ -31,7 +34,6 @@
   "homepage": "https://github.com/lramos1994/solarsys#readme",
   "devDependencies": {
     "@playwright/test": "^1.62.1",
-    "@xmldom/xmldom": "^0.9.12",
     "fast-xml-parser": "^5.11.0",
     "linkedom": "^0.18.13",
     "typescript": "^7.0.2",
