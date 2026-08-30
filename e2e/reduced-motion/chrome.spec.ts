@@ -28,6 +28,8 @@ test.describe('chrome transitions (no preference)', () => {
 });
 
 test.describe('chrome transitions (reduced motion)', () => {
+  test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
   test('chrome transitions are suppressed', async ({ page }) => {
     await page.goto('/');
     await expect(page.locator('#preview svg')).toBeVisible();

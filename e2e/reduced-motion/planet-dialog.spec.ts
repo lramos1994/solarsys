@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
+type Point = { x: number; y: number };
+
+const MOTION_TIMEOUT_MS = 1200;
+const MOTION_INTERVAL_MS = 120;
+
+function distance(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
 /**
  * Task 7.3 (UI-012): the isolated dialog preview honours reduced motion.
  *
@@ -28,30 +37,36 @@ async function openDialog(page: Page, index: number): Promise<void> {
   await expect(page.locator(`[data-role="planet-dialog"][data-index="${index}"]`)).toBeVisible();
 }
 
-/**
- * Displacement of the dialog preview's moon body over ~700ms. Planet 1 (index
- * 1) carries the default moon, so its preview is the one that moves.
- */
-async function previewMoonDisplacement(page: Page): Promise<number> {
+/** Position of the dialog preview's moon body for planet 2 (index 1). */
+async function previewMoonPosition(page: Page): Promise<Point> {
   const moon = page.locator(
     '[data-role="planet-dialog"][data-index="1"] [data-role="planet-preview"] [data-role="moon"]',
   );
+  const rect = await moon.boundingBox();
 
-  const box = async (): Promise<{ x: number; y: number }> => {
-    const rect = await moon.boundingBox();
+  if (rect === null) {
+    throw new Error('no moon body in the dialog preview');
+  }
 
-    if (rect === null) {
-      throw new Error('no moon body in the dialog preview');
-    }
+  return { x: rect.x, y: rect.y };
+}
 
-    return { x: rect.x, y: rect.y };
-  };
+/** Poll positionally until timeout, returning the largest observed displacement. */
+async function previewMoonDisplacement(
+  page: Page,
+  timeoutMs: number = MOTION_TIMEOUT_MS,
+  intervalMs: number = MOTION_INTERVAL_MS,
+): Promise<number> {
+  const first = await previewMoonPosition(page);
+  const startedAt = Date.now();
+  let furthest = 0;
 
-  const first = await box();
-  await page.waitForTimeout(700);
-  const second = await box();
+  while (Date.now() - startedAt < timeoutMs) {
+    await page.waitForTimeout(intervalMs);
+    furthest = Math.max(furthest, distance(first, await previewMoonPosition(page)));
+  }
 
-  return Math.hypot(second.x - first.x, second.y - first.y);
+  return furthest;
 }
 
 test.describe('dialog preview under reduced motion', () => {

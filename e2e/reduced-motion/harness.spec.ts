@@ -1,5 +1,7 @@
 import { expect, test } from '@playwright/test';
 
+test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
 // Reduced-motion layer harness check (task 1.3).
 //
 // This is NOT the control probe required by task 1.6 — that probe must prove

@@ -1,5 +1,7 @@
 import { defineConfig, devices } from '@playwright/test';
 
+const CHROMIUM_ONLY_PRESENTATION_FILES = ['e2e/presentation/visual-review.spec.ts'];
+
 // QLT-005/E-052: reduced-motion must be simulated through a mechanism that is
 // PROVEN to have an observable effect, never an assumed one.
 //
@@ -28,16 +30,33 @@ export default defineConfig({
   },
   projects: [
     { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
-    { name: 'firefox', use: { ...devices['Desktop Firefox'] } },
-    { name: 'webkit', use: { ...devices['Desktop Safari'] } },
+    {
+      name: 'firefox',
+      testIgnore: CHROMIUM_ONLY_PRESENTATION_FILES,
+      use: { ...devices['Desktop Firefox'] },
+    },
+    {
+      name: 'webkit',
+      testIgnore: CHROMIUM_ONLY_PRESENTATION_FILES,
+      use: { ...devices['Desktop Safari'] },
+    },
     {
       name: 'chromium-reduced-motion',
+      testIgnore: CHROMIUM_ONLY_PRESENTATION_FILES,
       use: {
         ...devices['Desktop Chrome'],
         contextOptions: { reducedMotion: 'reduce' },
       },
     },
-    { name: 'mobile-chrome', use: { ...devices['Pixel 7'] } },
-    { name: 'mobile-safari', use: { ...devices['iPhone 14'] } },
+    {
+      name: 'mobile-chrome',
+      testIgnore: CHROMIUM_ONLY_PRESENTATION_FILES,
+      use: { ...devices['Pixel 7'] },
+    },
+    {
+      name: 'mobile-safari',
+      testIgnore: CHROMIUM_ONLY_PRESENTATION_FILES,
+      use: { ...devices['iPhone 14'] },
+    },
   ],
 });

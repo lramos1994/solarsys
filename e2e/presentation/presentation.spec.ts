@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type TestInfo } from '@playwright/test';
 
 /**
  * Presentation layer (UI-001..007, CX-001..009).
@@ -15,6 +15,10 @@ import { expect, test, type Page } from '@playwright/test';
 const WIDE = { width: 1200, height: 800 };
 const EXTRA_WIDE = { width: 1440, height: 900 };
 const NARROW = { width: 400, height: 800 };
+
+function isMobileProject(testInfo: TestInfo): boolean {
+  return testInfo.project.name.startsWith('mobile-');
+}
 
 /** Parse an `rgb()`/`rgba()` string into channels. */
 function rgbChannels(color: string): [number, number, number] {
@@ -56,7 +60,11 @@ async function textAndBackground(
   selector: string,
 ): Promise<{ text: string; background: string }> {
   return page.evaluate((sel) => {
-    const element = document.querySelector<HTMLElement>(sel);
+    const element = sel.startsWith('text=')
+      ? [...document.querySelectorAll<HTMLElement>('body *')].find(
+          (node) => node.textContent?.trim() === sel.slice(5),
+        ) ?? null
+      : document.querySelector<HTMLElement>(sel);
 
     if (element === null) {
       throw new Error(`missing element: ${sel}`);
@@ -211,8 +219,10 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     await expect(page.locator('[data-role="current-seed"]')).toHaveCount(0);
   });
 
-  test('keeps the stage primary and overflow-free across the viewport matrix', async ({ page }) => {
-    for (const viewport of [NARROW, WIDE, EXTRA_WIDE]) {
+  test('keeps the stage primary and overflow-free across the viewport matrix', async ({ page }, testInfo) => {
+    const viewports = isMobileProject(testInfo) ? [NARROW] : [NARROW, WIDE, EXTRA_WIDE];
+
+    for (const viewport of viewports) {
       await page.setViewportSize(viewport);
 
       const stage = await page.locator('[data-role="instrument-stage"]').boundingBox();
@@ -235,7 +245,9 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
     }
   });
 
-  test('retains scannable operational groups and a legible stage under dense valid content', async ({ page }) => {
+  test('retains scannable operational groups and a legible stage under dense valid content', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Dense desktop scanability is asserted in desktop Chromium only.');
+
     await page.setViewportSize(WIDE);
 
     for (let count = 0; count < 3; count += 1) {
@@ -250,8 +262,8 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
       // visible and identifies the group, and its controls become visible once
       // expanded. Both halves are asserted rather than assuming every group is
       // permanently open.
-      await expect(group.locator(':scope > summary')).toBeVisible();
-      await expect(group.locator('.summary-title')).toBeVisible();
+      await expect(group.locator('[data-action="toggle-planet"]')).toBeVisible();
+      await expect(group.locator('[data-action="toggle-planet"]')).toContainText(/Planet \d+/);
 
       if (!(await group.evaluate((node) => node.hasAttribute('open')))) {
         await group.locator('[data-action="toggle-planet"]').click();
@@ -323,8 +335,10 @@ test.describe('observatory instrument contract (UI-001..007, CX-003, VR-001)', (
 });
 
 test.describe('stage actions (UI-004, UI-005)', () => {
-  test('places playback and download above the preview in every required viewport', async ({ page }) => {
-    for (const viewport of [NARROW, WIDE, EXTRA_WIDE]) {
+  test('places playback and download above the preview in every required viewport', async ({ page }, testInfo) => {
+    const viewports = isMobileProject(testInfo) ? [NARROW] : [NARROW, WIDE, EXTRA_WIDE];
+
+    for (const viewport of viewports) {
       await page.setViewportSize(viewport);
       await page.goto('/');
       await expect(page.locator('#preview svg')).toBeVisible();
@@ -344,14 +358,16 @@ test.describe('layout (UI-004, UI-005)', () => {
   test.describe('wide viewport', () => {
     test.use({ viewport: WIDE });
 
-    test.beforeEach(async ({ page }) => {
+    test.beforeEach(async ({ page }, testInfo) => {
+      test.skip(isMobileProject(testInfo), 'Desktop layout assertions do not run under mobile emulation.');
+
       await page.goto('/');
       await expect(page.locator('#preview svg')).toBeVisible();
     });
 
     test('places the controls beside the preview', async ({ page }) => {
-      const controls = await page.locator('.controls-pane').boundingBox();
-      const preview = await page.locator('.preview-pane').boundingBox();
+      const controls = await page.locator('[data-role="instrument-controls"]').boundingBox();
+      const preview = await page.locator('[data-role="instrument-stage"]').boundingBox();
 
       expect(controls).not.toBeNull();
       expect(preview).not.toBeNull();
@@ -369,8 +385,8 @@ test.describe('layout (UI-004, UI-005)', () => {
     });
 
     test('stacks the preview above the controls', async ({ page }) => {
-      const controls = await page.locator('.controls-pane').boundingBox();
-      const preview = await page.locator('.preview-pane').boundingBox();
+      const controls = await page.locator('[data-role="instrument-controls"]').boundingBox();
+      const preview = await page.locator('[data-role="instrument-stage"]').boundingBox();
 
       expect(controls).not.toBeNull();
       expect(preview).not.toBeNull();
@@ -386,26 +402,28 @@ test.describe('layout (UI-004, UI-005)', () => {
     });
 
     test('keeps the preview legible and full-width', async ({ page }) => {
-      const preview = await page.locator('.preview-pane').boundingBox();
+      const preview = await page.locator('[data-role="instrument-stage"]').boundingBox();
 
       expect(preview).not.toBeNull();
       expect(preview!.width).toBeGreaterThan(320);
     });
   });
 
-  test('reflows between the two arrangements on resize', async ({ page }) => {
+  test('reflows between the two arrangements on resize', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop reflow is asserted in desktop Chromium only.');
+
     await page.setViewportSize(WIDE);
     await page.goto('/');
     await expect(page.locator('#preview svg')).toBeVisible();
 
-    const wideControls = await page.locator('.controls-pane').boundingBox();
-    const widePreview = await page.locator('.preview-pane').boundingBox();
+    const wideControls = await page.locator('[data-role="instrument-controls"]').boundingBox();
+    const widePreview = await page.locator('[data-role="instrument-stage"]').boundingBox();
     expect(wideControls!.x).toBeLessThan(widePreview!.x);
 
     await page.setViewportSize(NARROW);
 
-    const narrowControls = await page.locator('.controls-pane').boundingBox();
-    const narrowPreview = await page.locator('.preview-pane').boundingBox();
+    const narrowControls = await page.locator('[data-role="instrument-controls"]').boundingBox();
+    const narrowPreview = await page.locator('[data-role="instrument-stage"]').boundingBox();
     expect(narrowPreview!.y).toBeLessThan(narrowControls!.y);
   });
 });
@@ -698,7 +716,10 @@ test.describe('contrast (UI-006)', () => {
   });
 
   test('muted helper text remains discernible', async ({ page }) => {
-    const { text, background } = await textAndBackground(page, '.pane-heading > p:last-child');
+    const { text, background } = await textAndBackground(
+      page,
+      'text=Calibrate the system, then observe the generated artefact.',
+    );
 
     expect(contrastRatio(text, background)).toBeGreaterThanOrEqual(3);
   });
@@ -711,13 +732,13 @@ test.describe('belt row presentation (UI-011)', () => {
   });
 
   test('the belt row treatment is distinct from a planet summary row', async ({ page }) => {
-    const belt = page.locator('.belt-row');
-    const planetSummary = page.locator('#controls [data-planet="0"] > summary').first();
+    const beltRow = page.locator('[data-role="asteroid-belt-group"] .belt-row');
+    const planetSummary = page.locator('[data-planet="0"] [data-action="toggle-planet"]').first();
 
-    await expect(belt).toBeVisible();
+    await expect(beltRow).toBeVisible();
     await expect(planetSummary).toBeVisible();
 
-    const beltBorder = await belt.evaluate((node) => {
+    const beltBorder = await beltRow.evaluate((node) => {
       const style = getComputedStyle(node);
       return { style: style.borderLeftStyle, width: style.borderLeftWidth };
     });
@@ -734,7 +755,7 @@ test.describe('belt row presentation (UI-011)', () => {
   });
 
   test('the belt type options are readable as text', async ({ page }) => {
-    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+    await page.locator('[data-role="asteroid-belt-group"] [data-action="toggle-belt-details"]').click();
 
     const options = await page
       .locator('[data-control="beltType"] option')
@@ -747,7 +768,7 @@ test.describe('belt row presentation (UI-011)', () => {
   test('the belt row resolves its colours through the token set', async ({ page }) => {
     const colours = await page.evaluate(() => {
       const root = getComputedStyle(document.documentElement);
-      const row = document.querySelector<HTMLElement>('.belt-row');
+      const row = document.querySelector<HTMLElement>('[data-role="asteroid-belt-group"] .belt-row');
 
       if (row === null) {
         return null;
@@ -774,18 +795,18 @@ test.describe('belt row presentation (UI-011)', () => {
   });
 
   test('hovering the belt row changes its computed treatment', async ({ page }) => {
-    const row = page.locator('.belt-row');
-    await expect(row).toBeVisible();
+    const beltRow = page.locator('[data-role="asteroid-belt-group"] .belt-row');
+    await expect(beltRow).toBeVisible();
 
-    const before = await row.evaluate((node) => {
+    const before = await beltRow.evaluate((node) => {
       const style = getComputedStyle(node);
 
       return { border: style.borderLeftColor, background: style.backgroundImage };
     });
 
-    await row.hover();
+    await beltRow.hover();
 
-    const after = await row.evaluate((node) => {
+    const after = await beltRow.evaluate((node) => {
       const style = getComputedStyle(node);
 
       return { border: style.borderLeftColor, background: style.backgroundImage };
