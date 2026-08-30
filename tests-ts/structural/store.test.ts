@@ -109,13 +109,44 @@ describe('scene store', () => {
     expect(notifications).toBe(2);
   });
 
-  it('serializes the scene exactly once per submission', () => {
+  it('serializes the scene exactly once per valid submission', () => {
+    const store = createSceneStore();
+
+    expect(store.getGenerationCount()).toBe(0);
+    store.submit(VALID);
+    expect(store.getGenerationCount()).toBe(1);
+
+    store.submit({ ...VALID, canvasHeight: '400' });
+    expect(store.getGenerationCount()).toBe(2);
+  });
+
+  it('does not regenerate on state reads', () => {
     const store = createSceneStore();
 
     store.submit(VALID);
+    const count = store.getGenerationCount();
 
-    // Reading repeatedly must not regenerate: preview and download consume
-    // the same string (D-19, EXP-002).
+    // Preview and download consume the same stored string (D-19, EXP-002):
+    // reading the state must never call the generator again, even though a
+    // regeneration would be byte-identical and therefore invisible to a
+    // byte comparison.
     expect(store.getState().svg).toBe(store.getState().svg);
+    store.getState();
+    store.getState();
+
+    expect(store.getGenerationCount()).toBe(count);
+  });
+
+  it('does not regenerate on a rejected submission', () => {
+    const store = createSceneStore();
+
+    store.submit(VALID);
+    const count = store.getGenerationCount();
+
+    store.submit({ ...VALID, canvasWidth: 'abc' });
+    store.submit({ ...VALID, canvasWidth: '999999' });
+
+    expect(store.getState().svg).not.toBeNull();
+    expect(store.getGenerationCount()).toBe(count);
   });
 });

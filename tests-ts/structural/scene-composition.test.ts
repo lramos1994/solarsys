@@ -59,15 +59,19 @@ describe('scene composition', () => {
       (element) => `#${element.getAttribute('id')}`,
     );
     // `:scope >` matters: a descendant selector would match the MOON's
-    // animateMotion first, since it is nested inside the planet group.
-    // Only the animated variant carries motion; twins are static by design.
-    const planetRefs = [
-      ...document.querySelectorAll('g[data-role="planet"].ss-animated'),
-    ].map((element) =>
+    // animateMotion first, since it is nested inside the planet group. Every
+    // planet group owns its animateMotion directly (the moon's lives inside a
+    // nested `g[data-role="moon"]`), so this is the real planet selection.
+    const planets = [...document.querySelectorAll('g[data-role="planet"]')];
+    const planetRefs = planets.map((element) =>
       element
         .querySelector(':scope > animateMotion > mpath')
         ?.getAttribute('xlink:href'),
     );
+
+    // Cardinality before the loop: the assertions below must actually run,
+    // never silently skip because the planet selector matched nothing.
+    expect(planetRefs).toHaveLength(PARAMS.planets.length);
 
     for (const reference of planetRefs) {
       expect(orbitIds).toContain(reference);
