@@ -84,7 +84,7 @@ const NUMERIC_CASES = [
     build: (value: string) =>
       input({
         planets: [
-          { size: '10', distance: '120', moon: { size: value, distance: '25', period: '15' } },
+          { size: '10', distance: '120', moon: { size: value, distance: '200', period: '15' } },
         ],
       }),
   },
@@ -94,7 +94,7 @@ const NUMERIC_CASES = [
     build: (value: string) =>
       input({
         planets: [
-          { size: '10', distance: '120', moon: { size: '3', distance: value, period: '15' } },
+          { size: '10', distance: '120', moon: { size: '30', distance: value, period: '15' } },
         ],
       }),
   },
@@ -104,7 +104,7 @@ const NUMERIC_CASES = [
     build: (value: string) =>
       input({
         planets: [
-          { size: '10', distance: '120', moon: { size: '3', distance: '25', period: value } },
+          { size: '10', distance: '120', moon: { size: '30', distance: '200', period: value } },
         ],
       }),
   },
@@ -182,12 +182,14 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
   });
 
   it('records the ergonomics bounds', () => {
+    // Canvas stays absolute; the geometric parameters are percentages of a
+    // stated reference length (CTL-015).
     expect(BOUNDS.canvasWidth).toEqual({ min: 100, max: 1_500 });
     expect(BOUNDS.canvasHeight).toEqual({ min: 100, max: 1_500 });
-    expect(BOUNDS.planetSize).toEqual({ min: 1, max: 100 });
-    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 400 });
-    expect(BOUNDS.moonSize).toEqual({ min: 1, max: 40 });
-    expect(BOUNDS.moonDistance).toEqual({ min: 0, max: 1_000 });
+    expect(BOUNDS.planetSize).toEqual({ min: 1, max: 25, step: 0.5 });
+    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 120 });
+    expect(BOUNDS.moonSize).toEqual({ min: 10, max: 60 });
+    expect(BOUNDS.moonDistance).toEqual({ min: 120, max: 600, step: 5 });
     expect(BOUNDS.moonPeriod).toEqual({ min: 1, max: 120 });
     expect(BOUNDS.ringSize).toEqual({ min: 140, max: 300 });
     expect(BOUNDS.ringInclination).toEqual({ min: 5, max: 60 });
@@ -199,12 +201,12 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
     expect(BOUNDS.seed).toEqual({ min: 0, max: 4_294_967_295 });
   });
 
-  it('keeps body and orbit maxima proportionate to the largest canvas', () => {
-    const largestCanvas = BOUNDS.canvasWidth.max;
-
-    expect(BOUNDS.planetSize.max).toBeLessThanOrEqual(largestCanvas / 10);
-    expect(BOUNDS.moonSize.max).toBeLessThanOrEqual(largestCanvas / 10);
-    expect(BOUNDS.orbitDistance.max).toBeLessThanOrEqual(largestCanvas * 2);
+  it('keeps body and orbit maxima proportionate to every canvas', () => {
+    // CTL-008 restated: proportionality now holds at every canvas size, not
+    // just against the largest one, because the values are percentages.
+    expect(BOUNDS.planetSize.max * 2).toBeLessThanOrEqual(50);
+    expect(BOUNDS.moonSize.max).toBeLessThanOrEqual(100);
+    expect(BOUNDS.orbitDistance.max).toBeGreaterThanOrEqual(100);
   });
 
   for (const { field, bound, build } of NUMERIC_CASES) {
@@ -301,38 +303,47 @@ describe('belt type (CTL-012)', () => {
   });
 });
 
-describe('orbit bound (CTL-013)', () => {
-  it('caps the shared orbital distance bound at 400 in every direction', () => {
-    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 400 });
-    expect(BOUNDS.orbitLeft).toEqual({ min: 0, max: 400 });
-    expect(BOUNDS.orbitTop).toEqual({ min: 0, max: 400 });
-    expect(BOUNDS.orbitRight).toEqual({ min: 0, max: 400 });
-    expect(BOUNDS.orbitBottom).toEqual({ min: 0, max: 400 });
+describe('orbit bound (CTL-015, retiring CTL-013)', () => {
+  it('caps the shared orbital distance bound at 120 percent in every direction', () => {
+    expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 120 });
+    expect(BOUNDS.orbitLeft).toEqual({ min: 0, max: 120 });
+    expect(BOUNDS.orbitTop).toEqual({ min: 0, max: 120 });
+    expect(BOUNDS.orbitRight).toEqual({ min: 0, max: 120 });
+    expect(BOUNDS.orbitBottom).toEqual({ min: 0, max: 120 });
   });
 
-  it('accepts the new maximum of 400', () => {
+  it('accepts the new maximum of 120', () => {
     expect(
-      validateScene(input({ planets: [{ size: '10', distance: '400', moon: false }] })).ok,
+      validateScene(input({ planets: [{ size: '10', distance: '120', moon: false }] })).ok,
     ).toBe(true);
   });
 
-  it('rejects a scalar distance above 400', () => {
+  it('no longer accepts the retired absolute maximum of 400', () => {
     const result = validateScene(
-      input({ planets: [{ size: '10', distance: '401', moon: false }] }),
+      input({ planets: [{ size: '10', distance: '400', moon: false }] }),
     );
 
     expect(result.ok).toBe(false);
     expect(result.ok === false && result.errors[0]?.field).toBe('orbitDistance');
   });
 
-  it('rejects any custom orbit extent above 400', () => {
+  it('rejects a scalar distance above 120', () => {
+    const result = validateScene(
+      input({ planets: [{ size: '10', distance: '121', moon: false }] }),
+    );
+
+    expect(result.ok).toBe(false);
+    expect(result.ok === false && result.errors[0]?.field).toBe('orbitDistance');
+  });
+
+  it('rejects any custom orbit extent above 120', () => {
     for (const direction of ['left', 'top', 'right', 'bottom'] as const) {
       const extents = {
-        left: '120',
-        top: '120',
-        right: '120',
-        bottom: '120',
-        [direction]: '401',
+        left: '100',
+        top: '100',
+        right: '100',
+        bottom: '100',
+        [direction]: '121',
       };
       const result = validateScene(input({
         planets: [{
@@ -349,8 +360,8 @@ describe('orbit bound (CTL-013)', () => {
     }
   });
 
-  it('keeps the default orbits 110/190/260 within the new bound', () => {
-    for (const distance of [110, 190, 260]) {
+  it('keeps the default orbits 37/63/87 within the new bound', () => {
+    for (const distance of [37, 63, 87]) {
       expect(distance, `${distance} within bound`).toBeLessThanOrEqual(
         BOUNDS.orbitDistance.max,
       );
@@ -360,6 +371,19 @@ describe('orbit bound (CTL-013)', () => {
         ).ok,
       ).toBe(true);
     }
+  });
+
+  it('resolves an authored percentage against the drawable half-extent', () => {
+    const result = validateScene(
+      input({
+        canvasWidth: '600',
+        canvasHeight: '600',
+        planets: [{ size: '10', distance: '50', moon: false }],
+      }),
+    );
+
+    // 50% of min(600, 600) / 2 = 150 absolute units reaching the generator.
+    expect(result.ok && result.params.planets[0]?.distance).toBe(150);
   });
 });
 
@@ -408,7 +432,7 @@ describe('baseline invalid-input cases', () => {
   it('accepts a four-value distance and rejects a malformed one (E-030)', () => {
     expect(
       validateScene(
-        input({ planets: [{ size: '10', distance: '150,60,150,60', moon: false }] }),
+        input({ planets: [{ size: '10', distance: '50,20,50,20', moon: false }] }),
       ).ok,
     ).toBe(true);
     expect(
@@ -495,13 +519,14 @@ describe('rejection semantics', () => {
 
   it('parses a four-value distance into its four extents', () => {
     const result = validateScene(
-      input({ planets: [{ size: '10', distance: '150,60,140,50', moon: false }] }),
+      input({ planets: [{ size: '10', distance: '100,40,80,20', moon: false }] }),
     );
 
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.params.planets[0]?.distance).toEqual([150, 60, 140, 50]);
+      // Percentages of the 300x300 canvas's 150-unit half-extent.
+      expect(result.params.planets[0]?.distance).toEqual([150, 60, 120, 30]);
     }
   });
 
@@ -512,10 +537,10 @@ describe('rejection semantics', () => {
           size: '10',
           distance: {
             mode: 'custom',
-            left: '150',
-            top: '60',
-            right: '140',
-            bottom: '50',
+            left: '100',
+            top: '40',
+            right: '80',
+            bottom: '20',
           },
           moon: false,
         },
@@ -528,7 +553,8 @@ describe('rejection semantics', () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.params.planets[0]?.distance).toEqual([150, 60, 140, 50]);
+      // Percentages of the 300x300 canvas's 150-unit half-extent.
+      expect(result.params.planets[0]?.distance).toEqual([150, 60, 120, 30]);
     }
   });
 

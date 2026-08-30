@@ -1,7 +1,13 @@
 import { RING_TYPES, type RingType } from '../generator/ring';
 import { PALETTE_NAMES, paletteByName, type PaletteName } from '../generator/palette';
 import { icon } from './icons';
-import { BELT_TYPES, BOUNDS, DEFAULT_BELT_TYPE, type BoundedField } from './validation';
+import {
+  BELT_TYPES,
+  BOUNDS,
+  DEFAULT_BELT_TYPE,
+  stepOf,
+  type BoundedField,
+} from './validation';
 import {
   RANDOM_PALETTE,
   type RawAsteroidBeltConfig,
@@ -36,8 +42,8 @@ import {
 export type RawSceneControls = Omit<RawSceneInput, 'seed'>;
 
 export const DEFAULT_MOON: RawMoonInput = {
-  size: '5',
-  distance: '32',
+  size: '28',
+  distance: '180',
   period: '15',
 };
 
@@ -64,14 +70,14 @@ export const DEFAULT_INPUT: RawSceneInput = {
   seed: '20260826',
   palette: RANDOM_PALETTE,
   planets: [
-    { size: '12', distance: { mode: 'scalar', value: '110' }, moon: false, ring: false },
+    { size: '4', distance: { mode: 'scalar', value: '37' }, moon: false, ring: false },
     {
-      size: '18',
-      distance: { mode: 'scalar', value: '190' },
-      moon: { size: '5', distance: '32', period: '15' },
+      size: '6',
+      distance: { mode: 'scalar', value: '63' },
+      moon: { size: '28', distance: '180', period: '15' },
       ring: { type: 'Banded', sizePercent: '210', inclinationDegrees: '16' },
     },
-    { size: '9', distance: { mode: 'scalar', value: '260' }, moon: false, ring: false },
+    { size: '3', distance: { mode: 'scalar', value: '87' }, moon: false, ring: false },
   ],
   asteroidBelt: DEFAULT_BELT,
 };
@@ -79,7 +85,7 @@ export const DEFAULT_INPUT: RawSceneInput = {
 /** Defaults for a newly added planet (CTL-003). */
 export const DEFAULT_PLANET: RawPlanetInput = {
   size: '10',
-  distance: { mode: 'scalar', value: '150' },
+  distance: { mode: 'scalar', value: '50' },
   moon: false,
   ring: false,
 };
@@ -205,15 +211,16 @@ function field(
 
   if (bound !== undefined) {
     const { min, max } = BOUNDS[bound];
+    const step = stepOf(bound);
 
     numeric =
       `<input id="${id}" data-control="${control}" type="number"` +
-      ` min="${min}" max="${max}" step="1" value="${escapeAttribute(value)}"` +
+      ` min="${min}" max="${max}" step="${step}" value="${escapeAttribute(value)}"` +
       `${ariaLabel} aria-describedby="${id}-error"/>`;
 
     range =
       `<input class="field-range" data-range-for="${id}" type="range"` +
-      ` min="${min}" max="${max}" step="1" value="${escapeAttribute(value)}"` +
+      ` min="${min}" max="${max}" step="${step}" value="${escapeAttribute(value)}"` +
       ` aria-labelledby="${id}-label"/>`;
   } else {
     numeric =

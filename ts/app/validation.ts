@@ -17,20 +17,26 @@ import type { PlanetParams, SceneParams } from '../generator/scene';
 export interface Bound {
   min: number;
   max: number;
+  /**
+   * Smallest accepted increment above `min` (CTL-015). A value inside the range
+   * but off this increment is rejected, and every native widget sources its
+   * `step` attribute from here. Defaults to 1 where omitted.
+   */
+  step?: number;
 }
 
 /** Both endpoints are accepted and source every matching native widget. */
 export const BOUNDS = {
   canvasWidth: { min: 100, max: 1_500 },
   canvasHeight: { min: 100, max: 1_500 },
-  planetSize: { min: 1, max: 100 },
-  orbitDistance: { min: 0, max: 400 },
-  orbitLeft: { min: 0, max: 400 },
-  orbitTop: { min: 0, max: 400 },
-  orbitRight: { min: 0, max: 400 },
-  orbitBottom: { min: 0, max: 400 },
-  moonSize: { min: 1, max: 40 },
-  moonDistance: { min: 0, max: 1_000 },
+  planetSize: { min: 1, max: 25, step: 0.5 },
+  orbitDistance: { min: 0, max: 120 },
+  orbitLeft: { min: 0, max: 120 },
+  orbitTop: { min: 0, max: 120 },
+  orbitRight: { min: 0, max: 120 },
+  orbitBottom: { min: 0, max: 120 },
+  moonSize: { min: 10, max: 60 },
+  moonDistance: { min: 120, max: 600, step: 5 },
   moonPeriod: { min: 1, max: 120 },
   ringSize: { min: 140, max: 300 },
   ringInclination: { min: 5, max: 60 },
@@ -43,6 +49,11 @@ export const BOUNDS = {
 } as const satisfies Record<string, Bound>;
 
 export type BoundedField = keyof typeof BOUNDS;
+
+/** A parameter's accepted increment, defaulting to whole numbers. */
+export function stepOf(field: BoundedField): number {
+  return (BOUNDS[field] as Bound).step ?? 1;
+}
 
 /** UI-only selector value: the generator chooses a palette from the seed. */
 export const RANDOM_PALETTE = 'Random';
@@ -150,6 +161,7 @@ function parseBounded(
   context = '',
 ): number | null {
   const bound = BOUNDS[field];
+  const step = stepOf(field);
   const label = context === '' ? LABELS[field] : `${LABELS[field]} for ${context}`;
   const range = `${bound.min} to ${bound.max}`;
   const trimmed = raw.trim();
@@ -159,8 +171,16 @@ function parseBounded(
     return null;
   }
 
-  if (!/^-?\d+$/.test(trimmed)) {
-    errors.push({ field, message: `${label} must be a whole number from ${range}.` });
+  // A fractional step admits one decimal place; a whole step keeps the
+  // integer-only grammar the absolute model used.
+  const grammar = step < 1 ? /^-?\d+(\.\d)?$/ : /^-?\d+$/;
+
+  if (!grammar.test(trimmed)) {
+    const kind = step < 1
+      ? `a number with at most one decimal place`
+      : `a whole number`;
+
+    errors.push({ field, message: `${label} must be ${kind} from ${range}.` });
     return null;
   }
 
@@ -171,24 +191,61 @@ function parseBounded(
     return null;
   }
 
+  // Compare in integer tenths: 4.25 % 0.5 is not 0 in binary floating point,
+  // but neither is 4.5 % 0.5 reliably.
+  const tenths = Math.round(value * 10) - Math.round(bound.min * 10);
+
+  if (tenths % Math.round(step * 10) !== 0) {
+    errors.push({
+      field,
+      message: `${label} must be from ${range} in steps of ${step}.`,
+    });
+    return null;
+  }
+
   return value;
+}
+
+/**
+ * The drawable half-extent: the distance from the canvas centre to the nearest
+ * edge (CTL-014). It is the reference length for orbital distance and planet
+ * size, so the same authored percentage frames the same composition at every
+ * canvas size.
+ */
+export function halfExtent(canvas: Canvas): number {
+  return Math.min(canvas.width, canvas.height) / 2;
+}
+
+/**
+ * Resolve an authored percentage against a reference length.
+ *
+ * Deliberately NOT rounded: the generator accepts fractional coordinates, and
+ * rounding would place the smallest permitted moon distance on the surface of
+ * the smallest permitted planet instead of outside it (CTL-015).
+ */
+export function resolvePercent(percent: number, reference: number): number {
+  return percent * reference / 100;
 }
 
 function parseDistance(
   raw: string | RawOrbitInput,
   errors: ValidationError[],
   context: string,
+  reference: number,
 ): OrbitDistance | null {
+  const resolve = (value: number | null): number | null =>
+    value === null ? null : resolvePercent(value, reference);
+
   if (typeof raw !== 'string') {
     if (raw.mode === 'scalar') {
-      return parseBounded(raw.value, 'orbitDistance', errors, context);
+      return resolve(parseBounded(raw.value, 'orbitDistance', errors, context));
     }
 
     const values = [
-      parseBounded(raw.left, 'orbitLeft', errors, context),
-      parseBounded(raw.top, 'orbitTop', errors, context),
-      parseBounded(raw.right, 'orbitRight', errors, context),
-      parseBounded(raw.bottom, 'orbitBottom', errors, context),
+      resolve(parseBounded(raw.left, 'orbitLeft', errors, context)),
+      resolve(parseBounded(raw.top, 'orbitTop', errors, context)),
+      resolve(parseBounded(raw.right, 'orbitRight', errors, context)),
+      resolve(parseBounded(raw.bottom, 'orbitBottom', errors, context)),
     ];
 
     if (values.some((value) => value === null)) {
@@ -208,7 +265,9 @@ function parseDistance(
     return null;
   }
 
-  const values = parts.map((part) => parseBounded(part, 'orbitDistance', errors, context));
+  const values = parts.map((part) =>
+    resolve(parseBounded(part, 'orbitDistance', errors, context)),
+  );
 
   if (values.some((value) => value === null)) {
     return null;
@@ -224,6 +283,7 @@ function parseMoon(
   raw: RawMoonInput | false,
   errors: ValidationError[],
   context: string,
+  planetRadius: number | null,
 ): MoonConfig | false | null {
   if (raw === false) {
     return false;
@@ -233,9 +293,17 @@ function parseMoon(
   const distance = parseBounded(raw.distance, 'moonDistance', errors, context);
   const period = parseBounded(raw.period, 'moonPeriod', errors, context);
 
-  return size === null || distance === null || period === null
-    ? null
-    : { size, distance, period };
+  // A moon is measured against the planet it orbits (CTL-014), so it cannot be
+  // resolved when the parent size was itself rejected.
+  if (size === null || distance === null || period === null || planetRadius === null) {
+    return null;
+  }
+
+  return {
+    size: resolvePercent(size, planetRadius),
+    distance: resolvePercent(distance, planetRadius),
+    period,
+  };
 }
 
 function parseRing(
@@ -344,20 +412,32 @@ export function validateScene(input: RawSceneInput): ValidationResult {
 
   const planets: PlanetParams[] = [];
 
+  // Authored percentages resolve against the canvas that was just validated
+  // (CTL-014). An invalid canvas short-circuits before any dependent
+  // resolution, so a rejected width never produces a bogus geometry.
+  const reference = width === null || height === null
+    ? null
+    : halfExtent({ width, height });
+
   input.planets.forEach((planet, index) => {
     const context = `planet ${index + 1}`;
     const errorStart = errors.length;
     const size = parseBounded(planet.size, 'planetSize', errors, context);
-    const distance = parseDistance(planet.distance, errors, context);
-    const moon = parseMoon(planet.moon, errors, context);
+    const planetRadius = size === null || reference === null
+      ? null
+      : resolvePercent(size, reference);
+    const distance = reference === null
+      ? null
+      : parseDistance(planet.distance, errors, context, reference);
+    const moon = parseMoon(planet.moon, errors, context, planetRadius);
     const ring = parseRing(planet.ring, errors, context);
 
     for (let i = errorStart; i < errors.length; i += 1) {
       errors[i] = { ...errors[i]!, index };
     }
 
-    if (size !== null && distance !== null && moon !== null && ring !== null) {
-      const parsed: PlanetParams = { size, distance, moon };
+    if (planetRadius !== null && distance !== null && moon !== null && ring !== null) {
+      const parsed: PlanetParams = { size: planetRadius, distance, moon };
 
       if (ring !== undefined) {
         parsed.ring = ring;
