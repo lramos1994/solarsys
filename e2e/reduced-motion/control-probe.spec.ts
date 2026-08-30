@@ -35,6 +35,8 @@ async function reportsReducedMotion(args: string[] = []): Promise<boolean> {
  * measurement and isolates the Chromium binary from runner configuration.
  */
 test.describe('reduced-motion control probe', () => {
+  test.use({ contextOptions: { reducedMotion: 'reduce' } });
+
   test('proves the configured Playwright simulation has an observable effect', async ({
     page,
   }) => {

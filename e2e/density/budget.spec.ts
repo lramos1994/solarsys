@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type TestInfo } from '@playwright/test';
 
 /**
  * Density budget (CD-001, CD-002, CD-006, CX-012, UI-008).
@@ -27,17 +27,25 @@ const COLLAPSED_GROUP_CEILING = 64;
 const DESKTOP = { width: 1440, height: 900 };
 const MOBILE = { width: 390, height: 844 };
 
+function isMobileProject(testInfo: TestInfo): boolean {
+  return testInfo.project.name.startsWith('mobile-');
+}
+
 async function measureSurface(page: import('@playwright/test').Page) {
   return page.evaluate(() => {
-    const pane = document.querySelector<HTMLElement>('.controls-pane');
+    const pane = document.querySelector<HTMLElement>('[data-role="instrument-controls"]');
     const form = document.querySelector<HTMLElement>('#controls');
 
     if (pane === null || form === null) {
       throw new Error('Control surface is not present.');
     }
 
-    const emptyErrorHeight = [...document.querySelectorAll<HTMLElement>('.field-error')]
-      .filter((slot) => slot.textContent === '')
+    // CD-006 (D-209): error slots are the `aria-describedby` targets; an empty
+    // slot must render at zero height. Resolved through the documented
+    // association contract rather than a structural parent/child assumption.
+    const emptyErrorHeight = [...document.querySelectorAll<HTMLElement>('[aria-describedby]')]
+      .map((control) => document.getElementById(control.getAttribute('aria-describedby') ?? ''))
+      .filter((slot): slot is HTMLElement => slot instanceof HTMLElement && slot.textContent === '')
       .reduce((total, slot) => total + slot.getBoundingClientRect().height, 0);
 
     return {
@@ -68,7 +76,9 @@ async function openPlanetDialog(page: import('@playwright/test').Page, index: nu
 test.describe('control deck density budget (CD-001)', () => {
   test('the default scene fits the desktop control pane without internal scroll', async ({
     page,
-  }) => {
+  }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -81,7 +91,9 @@ test.describe('control deck density budget (CD-001)', () => {
     expect(measured.paneScrollHeight).toBeLessThanOrEqual(measured.paneClientHeight + 1);
   });
 
-  test('the default scene stays within a bounded narrow scroll', async ({ page }) => {
+  test('the default scene stays within a bounded narrow scroll', async ({ page }, testInfo) => {
+    test.skip(!isMobileProject(testInfo), 'The bounded narrow-scroll assertion runs in the mobile project only.');
+
     await page.setViewportSize(MOBILE);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -91,7 +103,9 @@ test.describe('control deck density budget (CD-001)', () => {
     expect(measured.documentScrollHeight).toBeLessThanOrEqual(MOBILE_DOCUMENT_CEILING);
   });
 
-  test('density never suppresses a control', async ({ page }) => {
+  test('density never suppresses a control', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -120,7 +134,9 @@ test.describe('control deck density budget (CD-001)', () => {
     expect(measured.formHeight).toBeLessThanOrEqual(DESKTOP_FORM_CEILING);
   });
 
-  test('the orbital distance control stays in the deck', async ({ page }) => {
+  test('the orbital distance control stays in the deck', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -141,13 +157,15 @@ test.describe('control deck density budget (CD-001)', () => {
 });
 
 test.describe('wider control deck (CD-005)', () => {
-  test('uses the allocated desktop column without taking preview width', async ({ page }) => {
+  test('uses the allocated desktop column without taking preview width', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
 
     const measured = await measureSurface(page);
-    const preview = await page.locator('.preview-pane').boundingBox();
+    const preview = await page.locator('[data-role="instrument-stage"]').boundingBox();
     const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
 
     expect(measured.paneWidth).toBeGreaterThanOrEqual(420);
@@ -158,7 +176,9 @@ test.describe('wider control deck (CD-005)', () => {
 });
 
 test.describe('collapsed instrument groups (CD-002)', () => {
-  test('a collapsed planet group measures no more than a summary row', async ({ page }) => {
+  test('a collapsed planet group measures no more than a summary row', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -185,7 +205,9 @@ test.describe('collapsed instrument groups (CD-002)', () => {
 });
 
 test.describe('error space is allocated on demand (CD-006)', () => {
-  test('empty error slots contribute no height in the initial state', async ({ page }) => {
+  test('empty error slots contribute no height in the initial state', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');
@@ -197,7 +219,9 @@ test.describe('error space is allocated on demand (CD-006)', () => {
 });
 
 test.describe('the moon sub-group is compact (CX-012)', () => {
-  test('moon controls occupy no more than one row per control with visible sliders', async ({ page }) => {
+  test('moon controls occupy no more than one row per control with visible sliders', async ({ page }, testInfo) => {
+    test.skip(isMobileProject(testInfo), 'Desktop density assertions do not run under mobile emulation.');
+
     await page.setViewportSize(DESKTOP);
     await page.goto('/');
     await page.waitForSelector('#controls [data-control]');

@@ -122,7 +122,10 @@ async function openBeltDetails(page: Page): Promise<void> {
 
 async function openRingDetails(page: Page, index: number): Promise<void> {
   const dialog = page.locator(`[data-role="planet-dialog"][data-index="${index}"]`);
-  const details = dialog.locator('details.authored-group');
+  // The ring group is the `<details class="authored-group">` that owns the
+  // ringType control. Anchoring on the class + the data-control it contains
+  // is stable against nesting depth changes (unlike ancestor::details[1]).
+  const details = dialog.locator('details.authored-group:has([data-control="ringType"])');
 
   if (!(await details.evaluate((node) => node.hasAttribute('open')))) {
     await details.locator('summary').click();
@@ -346,8 +349,6 @@ async function writeEvidenceArtifacts(
 
 test.describe('material layering evidence (QLT-009)', () => {
   test('belt material stays layered at default scale', async ({ page }, testInfo: TestInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'Durable review evidence is captured once in Chromium.');
-
     await page.setViewportSize(VIEWPORTS.wide);
     await page.goto('/');
     await expect(page.locator('#preview svg')).toBeVisible();
@@ -415,8 +416,6 @@ test.describe('material layering evidence (QLT-009)', () => {
   });
 
   test('all ring types stay layered and occluded', async ({ page }, testInfo: TestInfo) => {
-    test.skip(testInfo.project.name !== 'chromium', 'Durable review evidence is captured once in Chromium.');
-
     await page.setViewportSize(VIEWPORTS.wide);
     await page.goto('/');
     await expect(page.locator('#preview svg')).toBeVisible();
@@ -457,7 +456,6 @@ test.describe('material layering evidence (QLT-009)', () => {
 for (const [viewportName, viewport] of Object.entries(VIEWPORTS)) {
   for (const state of STATES) {
     test(`visual matrix: ${viewportName} / ${state}`, async ({ page }, testInfo: TestInfo) => {
-      test.skip(testInfo.project.name !== 'chromium', 'Durable review evidence is captured once in Chromium.');
       await page.setViewportSize(viewport);
       const retainedPreview = await prepareState(page, state);
 

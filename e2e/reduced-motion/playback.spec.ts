@@ -1,5 +1,14 @@
 import { expect, test, type Page } from '@playwright/test';
 
+type Point = { x: number; y: number };
+
+const MOTION_TIMEOUT_MS = 1200;
+const MOTION_INTERVAL_MS = 120;
+
+function distance(a: Point, b: Point): number {
+  return Math.hypot(b.x - a.x, b.y - a.y);
+}
+
 /**
  * QLT-005 / QLT-009 (D-28): playback is controlled by the application.
  *
@@ -11,25 +20,35 @@ import { expect, test, type Page } from '@playwright/test';
  * would otherwise pass every "it stopped" assertion while proving nothing.
  */
 
-/** Displacement of the first visible planet over ~700ms. */
-async function displacement(page: Page): Promise<number> {
-  const box = async (): Promise<{ x: number; y: number }> => {
-    for (const locator of await page.locator('#preview g[data-role="planet"]').all()) {
-      const rect = await locator.boundingBox();
+/** Position of the first visible planet body in the main preview. */
+async function visiblePlanetPosition(page: Page): Promise<Point> {
+  for (const locator of await page.locator('#preview g[data-role="planet"]').all()) {
+    const rect = await locator.boundingBox();
 
-      if (rect !== null && rect.width > 0) {
-        return { x: rect.x, y: rect.y };
-      }
+    if (rect !== null && rect.width > 0) {
+      return { x: rect.x, y: rect.y };
     }
+  }
 
-    throw new Error('no visible planet group in the preview');
-  };
+  throw new Error('no visible planet group in the preview');
+}
 
-  const first = await box();
-  await page.waitForTimeout(700);
-  const second = await box();
+/** Poll positionally until timeout, returning the largest observed displacement. */
+async function observedDisplacement(
+  page: Page,
+  timeoutMs: number = MOTION_TIMEOUT_MS,
+  intervalMs: number = MOTION_INTERVAL_MS,
+): Promise<number> {
+  const first = await visiblePlanetPosition(page);
+  const startedAt = Date.now();
+  let furthest = 0;
 
-  return Math.hypot(second.x - first.x, second.y - first.y);
+  while (Date.now() - startedAt < timeoutMs) {
+    await page.waitForTimeout(intervalMs);
+    furthest = Math.max(furthest, distance(first, await visiblePlanetPosition(page)));
+  }
+
+  return furthest;
 }
 
 test.describe('playback control', () => {
@@ -42,7 +61,7 @@ test.describe('playback control', () => {
 
   test('CONTROL: the scene moves on load without the preference', async ({ page }) => {
     expect(
-      await displacement(page),
+      await observedDisplacement(page),
       'control failed: the scene never animated, so the pause assertions prove nothing',
     ).toBeGreaterThan(1);
   });
@@ -53,7 +72,7 @@ test.describe('playback control', () => {
     await expect(button).toHaveText('Pause animation');
     await button.click();
 
-    expect(await displacement(page), 'motion did not stop').toBeLessThan(1);
+    expect(await observedDisplacement(page), 'motion did not stop').toBeLessThan(1);
     await expect(button).toHaveText('Play animation');
 
     const visible = await page.locator('#preview g[data-role="planet"]').count();
@@ -64,11 +83,11 @@ test.describe('playback control', () => {
     const button = page.locator('[data-action="toggle-playback"]');
 
     await button.click();
-    expect(await displacement(page)).toBeLessThan(1);
+    expect(await observedDisplacement(page)).toBeLessThan(1);
 
     await button.click();
     await expect(button).toHaveText('Pause animation');
-    expect(await displacement(page), 'motion did not resume').toBeGreaterThan(1);
+    expect(await observedDisplacement(page), 'motion did not resume').toBeGreaterThan(1);
   });
 
   test('a paused scene stays paused when a parameter changes', async ({ page }) => {
@@ -79,7 +98,7 @@ test.describe('playback control', () => {
     await width.blur();
 
     await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
-    expect(await displacement(page), 'the regenerated scene resumed on its own').toBeLessThan(1);
+    expect(await observedDisplacement(page), 'the regenerated scene resumed on its own').toBeLessThan(1);
   });
 
   test('a paused regeneration keeps planets on their orbits', async ({ page }) => {
@@ -138,7 +157,7 @@ test.describe('reduced motion starts the scene paused', () => {
   });
 
   test('the scene does not move on load', async ({ page }) => {
-    expect(await displacement(page)).toBeLessThan(1);
+    expect(await observedDisplacement(page)).toBeLessThan(1);
     await expect(page.locator('[data-action="toggle-playback"]')).toHaveText('Play animation');
   });
 
@@ -163,7 +182,7 @@ test.describe('reduced motion starts the scene paused', () => {
     await page.locator('[data-action="toggle-playback"]').click();
 
     await expect(notice).toBeHidden();
-    expect(await displacement(page), 'play did not start the animation').toBeGreaterThan(1);
+    expect(await observedDisplacement(page), 'play did not start the animation').toBeGreaterThan(1);
   });
 });
 
@@ -181,7 +200,7 @@ test.describe('hovering an editable control pauses the preview (QLT-010)', () =>
     await expect(button).toHaveText('Pause animation');
     await page.locator('[data-control="canvasWidth"]').hover();
 
-    expect(await displacement(page), 'motion did not pause on hover').toBeLessThan(1);
+    expect(await observedDisplacement(page), 'motion did not pause on hover').toBeLessThan(1);
     await expect(button).toHaveText('Pause animation');
   });
 
@@ -189,7 +208,7 @@ test.describe('hovering an editable control pauses the preview (QLT-010)', () =>
     await page.locator('[data-control="canvasWidth"]').hover();
     await page.locator('#preview').hover();
 
-    expect(await displacement(page), 'motion did not resume').toBeGreaterThan(1);
+    expect(await observedDisplacement(page), 'motion did not resume').toBeGreaterThan(1);
   });
 
   test('a user-paused scene stays paused through hover and leave', async ({ page }) => {
@@ -201,7 +220,7 @@ test.describe('hovering an editable control pauses the preview (QLT-010)', () =>
     await page.locator('[data-control="canvasWidth"]').hover();
     await page.locator('#preview').hover();
 
-    expect(await displacement(page)).toBeLessThan(1);
+    expect(await observedDisplacement(page)).toBeLessThan(1);
     await expect(button).toHaveText('Play animation');
   });
 
@@ -214,7 +233,7 @@ test.describe('hovering an editable control pauses the preview (QLT-010)', () =>
 
     await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
     expect(
-      await displacement(page),
+      await observedDisplacement(page),
       'regenerated scene resumed under the hovering pointer',
     ).toBeLessThan(1);
   });
