@@ -4,7 +4,7 @@ import {
   renderComets,
   type AsteroidBeltConfig,
 } from './ambient';
-import { renderSun } from './bodies';
+import { renderSun, type SunType } from './bodies';
 import { rgba } from './color';
 import { documentShell } from './document';
 import { createIdGenerator, type IdGenerator } from './ids';
@@ -35,6 +35,8 @@ export interface SceneParams {
   palette?: PaletteName;
   /** Omitted preserves the legacy fixed belt for direct callers. */
   asteroidBelt?: AsteroidBeltConfig | false;
+  /** Authored sun class; omitted keeps the baseline Yellow Dwarf look. */
+  sunType?: SunType;
 }
 
 export interface SceneOptions {
@@ -190,7 +192,10 @@ export function generateScene(
     planets.push(rendered.planet);
   });
 
-  const sun = renderSun(params.canvas, palette, ids);
+  const sun = renderSun(params.canvas, palette, ids, {
+    ...(params.sunType === undefined ? {} : { type: params.sunType }),
+    random,
+  });
   const comets = debug ? '' : renderComets(params.canvas, palette, ids, random);
 
   // Title and description come first so assistive technology encounters the

@@ -65,6 +65,7 @@ const CONTROL_FOR_FIELD: Record<string, string> = {
   canvasWidth: 'canvasWidth',
   canvasHeight: 'canvasHeight',
   palette: 'palette',
+  sunType: 'sunType',
   planetSize: 'planetSize',
   orbitDistance: 'planetDistance',
   distanceForm: 'planetDistance',

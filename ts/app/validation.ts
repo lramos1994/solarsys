@@ -1,4 +1,5 @@
 import type { AsteroidBeltConfig } from '../generator/ambient';
+import { SUN_TYPES, type SunType } from '../generator/bodies';
 import type { MoonConfig } from '../generator/moon';
 import type { Canvas, OrbitDistance } from '../generator/orbit';
 import { PALETTE_NAMES, type PaletteName } from '../generator/palette';
@@ -58,6 +59,9 @@ export function stepOf(field: BoundedField): number {
 /** UI-only selector value: the generator chooses a palette from the seed. */
 export const RANDOM_PALETTE = 'Random';
 
+/** UI-only selector value: the generator keeps the baseline Yellow Dwarf sun. */
+export const DEFAULT_SUN_SELECTION = SUN_TYPES[0];
+
 /**
  * Authored asteroid-belt type value set (CTL-012). `rocky` is the documented
  * default, applied when the field is omitted.
@@ -109,6 +113,7 @@ export interface RawSceneInput {
   canvasHeight: string;
   seed: string;
   palette: string;
+  sunType?: string;
   planets: readonly RawPlanetInput[];
   asteroidBelt?: RawAsteroidBeltInput;
 }
@@ -116,6 +121,7 @@ export interface RawSceneInput {
 export type ValidationField =
   | BoundedField
   | 'palette'
+  | 'sunType'
   | 'distanceForm'
   | 'ringType'
   | 'beltType'
@@ -410,6 +416,16 @@ export function validateScene(input: RawSceneInput): ValidationResult {
     });
   }
 
+  const rawSunType = input.sunType === undefined ? DEFAULT_SUN_SELECTION : input.sunType;
+  const sunType = SUN_TYPES.includes(rawSunType as SunType) ? rawSunType as SunType : null;
+
+  if (sunType === null) {
+    errors.push({
+      field: 'sunType',
+      message: `Sun type must be one of ${SUN_TYPES.join(', ')}.`,
+    });
+  }
+
   const planets: PlanetParams[] = [];
 
   // Authored percentages resolve against the canvas that was just validated
@@ -453,13 +469,14 @@ export function validateScene(input: RawSceneInput): ValidationResult {
     height === null ||
     seed === null ||
     palette === null ||
+    sunType === null ||
     asteroidBelt === null
   ) {
     return { ok: false, errors };
   }
 
   const canvas: Canvas = { width, height };
-  const params: SceneParams = { canvas, planets };
+  const params: SceneParams = { canvas, planets, sunType };
 
   if (palette !== undefined) {
     params.palette = palette;

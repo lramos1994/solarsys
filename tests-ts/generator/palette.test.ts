@@ -76,9 +76,8 @@ describe('palettes', () => {
   it('derives ring bands and a gap tone from the accent colour', () => {
     const ring = ringColors(paletteByName('Aurora'));
 
-    expect(ring.bands).toHaveLength(2);
-    expect(ring.bands[0]).not.toBe(ring.bands[1]);
-    expect(ring.gap).not.toBe(ring.bands[0]);
-    expect(ring.gap).not.toBe(ring.bands[1]);
+    expect(ring.bands).toHaveLength(4);
+    expect(new Set(ring.bands).size).toBe(4);
+    expect(ring.bands).not.toContain(ring.gap);
   });
 });

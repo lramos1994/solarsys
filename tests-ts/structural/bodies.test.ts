@@ -41,7 +41,6 @@ describe('sun rendering', () => {
       sunRadius({ width: 300, height: 300 }),
     );
   });
-
   it('centres the sun on the canvas centre', () => {
     const document = parse(
       renderSun({ width: 300, height: 180 }, PALETTE, createIdGenerator(1)),
@@ -73,6 +72,62 @@ describe('sun rendering', () => {
     const body = Number(document.querySelector('circle[data-sun-body]')?.getAttribute('r'));
 
     expect(glow).toBeGreaterThan(body);
+  });
+});
+
+describe('sun type and rotation', () => {
+  it('scales the Red Giant larger and the White Dwarf smaller than the default', () => {
+    const canvas = { width: 300, height: 300 };
+
+    expect(sunRadius(canvas, 'RedGiant')).toBeGreaterThan(sunRadius(canvas, 'YellowDwarf'));
+    expect(sunRadius(canvas, 'WhiteDwarf')).toBeLessThan(sunRadius(canvas, 'YellowDwarf'));
+  });
+
+  it('keeps the baseline radius when no type is authored', () => {
+    const canvas = { width: 300, height: 300 };
+
+    expect(sunRadius(canvas)).toBe(sunRadius(canvas, 'YellowDwarf'));
+  });
+
+  it('re-tones the sun per authored type', () => {
+    const bandsFor = (type: 'YellowDwarf' | 'RedGiant' | 'WhiteDwarf'): string | null =>
+      parse(
+        renderSun({ width: 300, height: 300 }, PALETTE, createIdGenerator(1), { type }),
+      ).querySelector('circle[data-sun-body]')?.getAttribute('fill') ?? null;
+
+    const tones = new Set([bandsFor('YellowDwarf'), bandsFor('RedGiant'), bandsFor('WhiteDwarf')]);
+
+    expect(tones.size).toBe(3);
+  });
+
+  it('omits the rotating spot layer when no generator is supplied', () => {
+    const document = parse(
+      renderSun({ width: 300, height: 300 }, PALETTE, createIdGenerator(1)),
+    );
+
+    expect(document.querySelector('[data-role="sun-spots"]')).toBeNull();
+  });
+
+  it('renders a rotating spot layer when a generator is supplied', () => {
+    const document = parse(
+      renderSun({ width: 300, height: 300 }, PALETTE, createIdGenerator(1), {
+        random: createPrng(7),
+      }),
+    );
+    const spots = document.querySelector('[data-role="sun-spots"]');
+
+    expect(spots).not.toBeNull();
+    expect(spots?.querySelector('animateTransform[type="rotate"]')).not.toBeNull();
+    expect(document.querySelectorAll('circle[data-role="sun-spot"]').length).toBeGreaterThan(0);
+  });
+
+  it('renders the spot layer identically for a repeated seed', () => {
+    const render = (): string =>
+      renderSun({ width: 300, height: 300 }, PALETTE, createIdGenerator(7), {
+        random: createPrng(7),
+      });
+
+    expect(render()).toBe(render());
   });
 });
 

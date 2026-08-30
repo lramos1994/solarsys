@@ -1,5 +1,9 @@
 import { hueShift, mix, rgba, shade, tint } from './color';
 
+/** Authored sun classes (an authored parameter, not seed-only). */
+export const SUN_TYPES = ['YellowDwarf', 'RedGiant', 'WhiteDwarf'] as const;
+export type SunType = (typeof SUN_TYPES)[number];
+
 /** The six cohesive palettes preserved from the baseline (E-011, GEN-011). */
 export const PALETTE_NAMES = [
   'Aurora',
@@ -110,17 +114,30 @@ export function moonColors(palette: Palette, index: number): BodyColors {
 }
 
 export interface RingColors {
-  bands: readonly [string, string];
+  /** Four material tones, ordered from the brightest icy band to the dustiest. */
+  bands: readonly [string, string, string, string];
   gap: string;
 }
 
-/** Derive the ring's two bands and its gap tone from the palette accent. */
+/**
+ * Derive the ring's material tones and its gap tone from the palette accent.
+ *
+ * Four tones rather than two: real ring systems read as banded because
+ * adjacent bands differ in brightness AND in material, so the darkest tone
+ * also carries a small hue shift toward dust instead of being a plain
+ * darkening of the same colour.
+ */
 export function ringColors(palette: Palette): RingColors {
   const accent = palette.accent;
 
   return {
-    bands: [tint(accent, 0.2), shade(accent, 0.3)],
-    gap: shade(accent, 0.6),
+    bands: [
+      tint(accent, 0.45),
+      tint(accent, 0.1),
+      shade(accent, 0.3),
+      shade(hueShift(accent, -12), 0.5),
+    ],
+    gap: shade(accent, 0.68),
   };
 }
 
@@ -130,9 +147,18 @@ export interface SunColors {
   corona: string;
 }
 
-/** Derive the sun's banded tones, glow and corona from the palette. */
-export function sunColors(palette: Palette): SunColors {
-  const base = palette.sun;
+/** Derive the sun's banded tones, glow and corona from the palette.
+ *
+ * `type` re-tones the baseline Yellow Dwarf palette colour toward each
+ * authored sun class: a Red Giant hue-shifts warmer, a White Dwarf is
+ * desaturated toward white. Omitted keeps the exact baseline colours.
+ */
+export function sunColors(palette: Palette, type?: SunType): SunColors {
+  const base = type === 'RedGiant'
+    ? shade(hueShift(palette.sun, -20), 0.05)
+    : type === 'WhiteDwarf'
+      ? tint(palette.sun, 0.55)
+      : palette.sun;
 
   return {
     bands: [tint(base, 0.5), base, shade(base, 0.35)],

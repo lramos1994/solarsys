@@ -1,5 +1,6 @@
 import { RING_TYPES, type RingType } from '../generator/ring';
 import { PALETTE_NAMES, paletteByName, type PaletteName } from '../generator/palette';
+import { SUN_TYPES, type SunType } from '../generator/bodies';
 import { icon } from './icons';
 import {
   BELT_TYPES,
@@ -9,6 +10,7 @@ import {
   type BoundedField,
 } from './validation';
 import {
+  DEFAULT_SUN_SELECTION,
   RANDOM_PALETTE,
   type RawAsteroidBeltConfig,
   type RawMoonInput,
@@ -69,6 +71,7 @@ export const DEFAULT_INPUT: RawSceneInput = {
   canvasHeight: '600',
   seed: '20260826',
   palette: RANDOM_PALETTE,
+  sunType: DEFAULT_SUN_SELECTION,
   planets: [
     { size: '4', distance: { mode: 'scalar', value: '37' }, moon: false, ring: false },
     {
@@ -555,6 +558,34 @@ function planetInstrument(
   );
 }
 
+/** Sun type label + option markup, matching the belt/ring selector style. */
+const SUN_TYPE_LABELS: Record<SunType, string> = {
+  YellowDwarf: 'Yellow Dwarf',
+  RedGiant: 'Red Giant',
+  WhiteDwarf: 'White Dwarf',
+};
+
+/** Sun class selector (scene-level, alongside palette). */
+function sunGroup(selected: string): string {
+  const options = SUN_TYPES.map(
+    (type) =>
+      `<option value="${type}"${type === selected ? ' selected' : ''}>` +
+      `${SUN_TYPE_LABELS[type]}</option>`,
+  ).join('');
+
+  return (
+    `<div class="field">` +
+    `<label id="sun-type-label" for="sun-type">${icon('sun')}<span>Sun type</span></label>` +
+    `<span class="field-value">` +
+    `<select id="sun-type" data-control="sunType" aria-describedby="sun-type-error">` +
+    options +
+    `</select>` +
+    `</span>` +
+    `<span id="sun-type-error" class="field-error"></span>` +
+    `</div>`
+  );
+}
+
 /** Palette swatch group (CX-011): every option shows its colours AND its name. */
 function paletteGroup(selected: string): string {
   const option = (name: string, swatches: readonly string[]): string => {
@@ -633,6 +664,7 @@ export function controlsMarkup(input: RawSceneControls, view: ControlView = {}):
     }) +
     `</fieldset>` +
     paletteGroup(input.palette) +
+    sunGroup(input.sunType ?? DEFAULT_SUN_SELECTION) +
     beltGroup(input, view.beltOpen ?? false) +
     input.planets
       .map((planet, index) => planetInstrument(planet, index, collapsed, ringOpen))
@@ -692,6 +724,9 @@ export function readControls(root: ParentNode): RawSceneControls {
 
   const palette =
     root.querySelector<HTMLInputElement>('[data-control="palette"]:checked')?.value ?? '';
+  const sunType =
+    root.querySelector<HTMLSelectElement>('[data-control="sunType"]')?.value ??
+    DEFAULT_SUN_SELECTION;
   const beltEnabled =
     root.querySelector<HTMLInputElement>('[data-control="beltEnabled"]')?.checked ?? false;
   const readBelt = (control: string, fallback = ''): string =>
@@ -702,6 +737,7 @@ export function readControls(root: ParentNode): RawSceneControls {
     canvasWidth: value('[data-control="canvasWidth"]'),
     canvasHeight: value('[data-control="canvasHeight"]'),
     palette,
+    sunType,
     planets,
     asteroidBelt: beltEnabled
       ? {

@@ -1,8 +1,18 @@
 import { rgba } from './color';
 import type { IdGenerator } from './ids';
 import type { Canvas } from './orbit';
-import { type BodyColors, type Palette, planetColors, sunColors } from './palette';
+import {
+  type BodyColors,
+  type Palette,
+  planetColors,
+  SUN_TYPES,
+  sunColors,
+  type SunColors,
+  type SunType,
+} from './palette';
 import type { Prng } from './prng';
+
+export { SUN_TYPES, type SunType } from './palette';
 
 /** Round to the two-decimal precision the baseline emits. */
 function round(value: number): number {
@@ -14,21 +24,96 @@ function randomInt(random: Prng, min: number, max: number): number {
   return min + Math.floor(random.next() * (max - min + 1));
 }
 
+const DEFAULT_SUN_TYPE: SunType = 'YellowDwarf';
+
+/** Radius multiplier applied on top of the canvas-derived base radius. */
+const SUN_TYPE_SCALE: Record<SunType, number> = {
+  YellowDwarf: 1,
+  RedGiant: 1.45,
+  WhiteDwarf: 0.55,
+};
+
 /** Sun radius derived from the canvas dimensions, preserved from the baseline. */
-export function sunRadius(canvas: Canvas): number {
-  return ((canvas.width + canvas.height) / 2.5) * 0.05;
+export function sunRadius(canvas: Canvas, type: SunType = DEFAULT_SUN_TYPE): number {
+  return ((canvas.width + canvas.height) / 2.5) * 0.05 * SUN_TYPE_SCALE[type];
+}
+
+export interface SunOptions {
+  /** Authored sun class; omitted keeps the baseline Yellow Dwarf look. */
+  type?: SunType;
+  /**
+   * Seeded generator driving surface-spot placement and rotation duration.
+   * Omitted keeps the sun static with no spot layer, for backward
+   * compatibility with direct callers that pre-date rotation.
+   */
+  random?: Prng;
+}
+
+/** Low-count surface spots, rotated as a group to read as stellar rotation. */
+function renderSunSpots(
+  radius: number,
+  tones: SunColors,
+  random: Prng,
+  cx: number,
+  cy: number,
+): string {
+  const count = randomInt(random, 3, 6);
+  let spots = '';
+
+  for (let spot = 0; spot < count; spot += 1) {
+    const angle = (randomInt(random, 0, 360) * Math.PI) / 180;
+    const distance = (radius * randomInt(random, 10, 70)) / 100;
+    const spotCx = round(cx + Math.cos(angle) * distance);
+    const spotCy = round(cy + Math.sin(angle) * distance);
+    const size = (radius * randomInt(random, 8, 20)) / 100;
+
+    spots +=
+      `<circle data-role="sun-spot" cx="${spotCx}" cy="${spotCy}" r="${round(size)}"` +
+      ` fill="${tones.bands[2]}" opacity="0.35"/>`;
+  }
+
+  return spots;
 }
 
 /**
- * Render the sun: a radial glow, a corona ring, concentric flat bands and an
- * offset highlight, centred on the canvas centre (GEN-005).
+ * Render the sun: a radial glow, a corona ring, concentric flat bands, an
+ * offset highlight and, when a generator is supplied, a rotating layer of
+ * surface spots, centred on the canvas centre (GEN-005).
+ *
+ * The sun class (`options.type`) is an authored parameter that scales the
+ * body and re-tones it (the baseline colours remain the Yellow Dwarf
+ * default). Rotation duration is seed-derived, matching how orbital periods
+ * and other purely visual motion are generated elsewhere in the scene.
  */
-export function renderSun(canvas: Canvas, palette: Palette, ids: IdGenerator): string {
+export function renderSun(
+  canvas: Canvas,
+  palette: Palette,
+  ids: IdGenerator,
+  options: SunOptions = {},
+): string {
+  const type = options.type ?? DEFAULT_SUN_TYPE;
   const cx = canvas.width / 2;
   const cy = canvas.height / 2;
-  const radius = sunRadius(canvas);
+  const radius = sunRadius(canvas, type);
   const glowId = ids.next('sun-glow');
-  const tones = sunColors(palette);
+  const tones = sunColors(palette, type);
+
+  const spotLayer = options.random === undefined
+    ? ''
+    : (() => {
+        const random = options.random as Prng;
+        const spotId = ids.next('sun-spots');
+        const duration = randomInt(random, 40, 120);
+
+        return (
+          `<defs><clipPath id="clip-${spotId}"><circle cx="${cx}" cy="${cy}" r="${radius}"/></clipPath></defs>` +
+          `<g id="${spotId}" data-role="sun-spots" clip-path="url(#clip-${spotId})">` +
+          renderSunSpots(radius, tones, random, cx, cy) +
+          `<animateTransform attributeName="transform" type="rotate"` +
+          ` from="0 ${cx} ${cy}" to="360 ${cx} ${cy}" dur="${duration}s" repeatCount="indefinite"/>` +
+          `</g>`
+        );
+      })();
 
   return (
     `<defs><radialGradient id="${glowId}">` +
@@ -42,7 +127,8 @@ export function renderSun(canvas: Canvas, palette: Palette, ids: IdGenerator): s
     `<circle data-role="sun-band" data-sun-body="true" cx="${cx}" cy="${cy}" r="${radius}" fill="${tones.bands[2]}"/>` +
     `<circle data-role="sun-band" cx="${cx}" cy="${cy}" r="${round(radius * 0.8)}" fill="${tones.bands[1]}"/>` +
     `<circle data-role="sun-highlight" cx="${round(cx - radius * 0.25)}" cy="${round(cy - radius * 0.25)}"` +
-    ` r="${round(radius * 0.5)}" fill="${tones.bands[0]}"/>`
+    ` r="${round(radius * 0.5)}" fill="${tones.bands[0]}"/>` +
+    spotLayer
   );
 }
 
