@@ -137,11 +137,8 @@ async function openRingDetails(page: Page, index: number): Promise<void> {
 type BeltEvidence = {
   selectedType: string;
   asteroidCount: number;
-  symbolCount: number;
-  highlightCount: number;
-  shadowCount: number;
-  silhouetteCount: number;
-  firstSymbolLayers: string[];
+  clusterCount: number;
+  toneOrder: string[];
   silhouetteFill: string;
   highlightFill: string;
   shadowFill: string;
@@ -152,12 +149,8 @@ async function beltMaterialEvidence(page: Page): Promise<BeltEvidence> {
   return page.evaluate(() => {
     const select = document.querySelector<HTMLSelectElement>('[data-control="beltType"]');
     const belt = document.querySelector<SVGGElement>('#preview [data-role="asteroid-belt"]');
-    const asteroidCount = document.querySelectorAll('#preview [data-role="asteroid"]').length;
-    const symbols = [...document.querySelectorAll<SVGGElement>('#preview [data-role="asteroid-symbol"]')];
-    const highlights = document.querySelectorAll('#preview [data-role="asteroid-highlight"]').length;
-    const shadows = document.querySelectorAll('#preview [data-role="asteroid-shadow"]').length;
-    const silhouettes = document.querySelectorAll('#preview [data-role="asteroid-silhouette"]').length;
-    const asteroidBodies = [...document.querySelectorAll<SVGUseElement>('#preview [data-role="asteroid"]')];
+    // Baked form (GEN-026): rocks are silhouette subpaths in opacity clusters.
+    const clusters = [...document.querySelectorAll<SVGGElement>('#preview [data-role="asteroid-cluster"]')];
 
     if (select === null) {
       throw new Error('Cannot inspect belt detail: the belt type control is missing.');
@@ -167,30 +160,39 @@ async function beltMaterialEvidence(page: Page): Promise<BeltEvidence> {
       throw new Error('Cannot inspect belt detail: the asteroid belt did not render.');
     }
 
-    if (symbols.length === 0) {
-      throw new Error('Cannot inspect belt detail: no asteroid symbols rendered.');
+    if (clusters.length === 0) {
+      throw new Error('Cannot inspect belt detail: no asteroid clusters rendered.');
     }
 
-    if (asteroidBodies.length === 0) {
+    const subpathCount = (path: Element | null): number =>
+      (path?.getAttribute('d') ?? '').split('M').length - 1;
+
+    const asteroidCount = clusters.reduce(
+      (sum, cluster) =>
+        sum + subpathCount(cluster.querySelector('[data-role="asteroid-silhouettes"]')),
+      0,
+    );
+
+    if (asteroidCount === 0) {
       throw new Error('Cannot inspect belt detail: no asteroid bodies rendered.');
     }
 
-    const first = symbols[0]!;
-    const firstSymbolLayers = [...first.children].map((node) =>
+    const first = clusters[0]!;
+    const toneOrder = [...first.children].map((node) =>
       node.getAttribute('data-role') ?? node.tagName,
     );
-    const silhouette = first.querySelector<SVGPolygonElement>('[data-role="asteroid-silhouette"]');
-    const highlight = first.querySelector<SVGPolygonElement>('[data-role="asteroid-highlight"]');
-    const shadow = first.querySelector<SVGPolygonElement>('[data-role="asteroid-shadow"]');
+    const silhouettes = first.querySelector<SVGPathElement>('[data-role="asteroid-silhouettes"]');
+    const highlights = first.querySelector<SVGPathElement>('[data-role="asteroid-highlights"]');
+    const shadows = first.querySelector<SVGPathElement>('[data-role="asteroid-shadows"]');
 
-    if (silhouette === null || highlight === null || shadow === null) {
-      throw new Error('Cannot inspect belt detail: the first asteroid symbol is incomplete.');
+    if (silhouettes === null || highlights === null || shadows === null) {
+      throw new Error('Cannot inspect belt detail: the first cluster is missing a tone path.');
     }
 
-    const silhouetteFill = getComputedStyle(silhouette).fill;
-    const highlightFill = getComputedStyle(highlight).fill;
-    const shadowFill = getComputedStyle(shadow).fill;
-    const sampleBodies = asteroidBodies.slice(0, 3).map((node) => {
+    const silhouetteFill = getComputedStyle(silhouettes).fill;
+    const highlightFill = getComputedStyle(highlights).fill;
+    const shadowFill = getComputedStyle(shadows).fill;
+    const sampleBodies = clusters.slice(0, 3).map((node) => {
       const box = node.getBoundingClientRect();
 
       return {
@@ -203,18 +205,15 @@ async function beltMaterialEvidence(page: Page): Promise<BeltEvidence> {
 
     if (sampleBodies.some((box) => box.width <= 0 || box.height <= 0)) {
       throw new Error(
-        `Cannot inspect belt detail: representative asteroid bodies did not render measurable geometry (${JSON.stringify(sampleBodies)}).`,
+        `Cannot inspect belt detail: representative clusters did not render measurable geometry (${JSON.stringify(sampleBodies)}).`,
       );
     }
 
     return {
       selectedType: select.value,
-      asteroidCount: asteroidCount,
-      symbolCount: symbols.length,
-      highlightCount: highlights,
-      shadowCount: shadows,
-      silhouetteCount: silhouettes,
-      firstSymbolLayers,
+      asteroidCount,
+      clusterCount: clusters.length,
+      toneOrder,
       silhouetteFill,
       highlightFill,
       shadowFill,
@@ -363,11 +362,8 @@ test.describe('material layering evidence (QLT-009)', () => {
 
       expect(evidence.selectedType).toBe(type);
       expect(evidence.asteroidCount).toBeGreaterThan(0);
-      expect(evidence.symbolCount).toBeGreaterThan(0);
-      expect(evidence.highlightCount).toBeGreaterThan(0);
-      expect(evidence.shadowCount).toBeGreaterThan(0);
-      expect(evidence.silhouetteCount).toBeGreaterThan(0);
-      expect(evidence.firstSymbolLayers).toEqual(['asteroid-silhouette', 'asteroid-highlight', 'asteroid-shadow']);
+      expect(evidence.clusterCount).toBeGreaterThan(0);
+      expect(evidence.toneOrder).toEqual(['asteroid-silhouettes', 'asteroid-highlights', 'asteroid-shadows']);
 
       const silhouetteHighlight = channelContrast(evidence.silhouetteFill, evidence.highlightFill);
       const silhouetteShadow = channelContrast(evidence.silhouetteFill, evidence.shadowFill);
@@ -402,7 +398,13 @@ test.describe('material layering evidence (QLT-009)', () => {
       });
     }
 
-    const asteroids = await page.locator('#preview [data-role="asteroid"]').count();
+    const asteroids = await page.evaluate(() =>
+      Number(
+        document
+          .querySelector('#preview [data-role="asteroid-belt"]')
+          ?.getAttribute('data-count') ?? 0,
+      ),
+    );
     expect(asteroids).toBeGreaterThan(0);
 
     const screenshot = testInfo.outputPath('belt-material.png');

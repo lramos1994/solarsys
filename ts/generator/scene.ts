@@ -65,6 +65,28 @@ function selectPalette(params: SceneParams, random: Prng): Palette {
   return paletteByName(PALETTE_NAMES[randomInt(random, 0, PALETTE_NAMES.length - 1)]!);
 }
 
+/**
+ * Visible orbit stroke marking the asteroid belt's centre radius (GEN-025).
+ *
+ * Emitted outside the belt's rotating group so it stays static, and given a
+ * role of its own so it is never mistaken for a planet orbit. It carries no
+ * planet index because it belongs to no planet.
+ */
+function renderBeltOrbit(
+  canvas: Canvas,
+  belt: AsteroidBeltConfig,
+  orbitId: string,
+): string {
+  const centre = (belt.innerRadius + belt.outerRadius) / 2;
+
+  return (
+    `<path data-role="belt-orbit"` +
+    ` id="${orbitId}" fill="none"` +
+    ` stroke="${rgba('#ffffff', 0.06)}" stroke-width="0.4"` +
+    ` d="${orbitPath(canvas, centre)}"/>`
+  );
+}
+
 /** Visible orbit stroke, which is also the planet's motion path (GEN-003). */
 function renderOrbit(
   canvas: Canvas,
@@ -173,6 +195,13 @@ export function generateScene(
   const belt = debug || params.asteroidBelt === false
     ? ''
     : renderAsteroidBelt(params.canvas, palette, ids, random, params.asteroidBelt);
+  // The belt's own orbit stroke (GEN-025). Emitted here so it sits in the orbit
+  // layer and outside the belt's rotating group; its position in generation
+  // order is contractual because ids are seed-derived counters.
+  const beltOrbit =
+    debug || params.asteroidBelt === false || params.asteroidBelt === undefined
+      ? ''
+      : renderBeltOrbit(params.canvas, params.asteroidBelt, ids.next('belt-orbit'));
 
   const orbits: string[] = [];
   const planets: string[] = [];
@@ -215,6 +244,7 @@ export function generateScene(
   const content =
     background +
     belt +
+    beltOrbit +
     orbits.join('') +
     sun +
     planets.join('') +

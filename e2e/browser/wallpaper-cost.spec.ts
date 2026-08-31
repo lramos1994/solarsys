@@ -65,9 +65,10 @@ const DEFAULT_PARAMS: SceneParams = {
   asteroidBelt: {
     type: 'rocky',
     count: 130,
-    innerRadiusPercent: 81,
-    outerRadiusPercent: 87,
-    size: 2,
+    // Absolute units against the scene's own half-extent (CTL-017).
+    innerRadius: 243,
+    outerRadius: 261,
+    baseRadius: 2.1,
     period: 163,
   },
 };

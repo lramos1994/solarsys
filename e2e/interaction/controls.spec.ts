@@ -398,16 +398,27 @@ test.describe('ring configuration (CTL-010)', () => {
 });
 
 test.describe('asteroid belt configuration (CTL-011)', () => {
+  /** Rock count under the baked serialization: silhouette subpaths (GEN-026). */
+  const bakedRockCount = (page: Page): Promise<number> =>
+    page.evaluate(() =>
+      [...document.querySelectorAll('#preview [data-role="asteroid-silhouettes"]')]
+        .reduce((sum, path) => sum + ((path.getAttribute('d') ?? '').split('M').length - 1), 0),
+    );
+
   test('opens enabled with the default configuration', async ({ page }) => {
     await expect(page.locator('[data-control="beltEnabled"]')).toBeChecked();
     await expect(page.locator('[data-control="asteroidCount"]')).toHaveValue('130');
-    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(130);
+    expect(await bakedRockCount(page)).toBe(130);
+    await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveAttribute(
+      'data-count',
+      '130',
+    );
   });
 
   test('disabling the belt removes belt output', async ({ page }) => {
     await page.locator('[data-control="beltEnabled"]').uncheck();
 
-    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="asteroid-cluster"]')).toHaveCount(0);
     await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveCount(0);
   });
 
@@ -416,14 +427,40 @@ test.describe('asteroid belt configuration (CTL-011)', () => {
 
     await setValue(page.locator('[data-control="asteroidCount"]'), '40');
 
-    await expect(page.locator('#preview [data-role="asteroid"]')).toHaveCount(40);
+    await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveAttribute(
+      'data-count',
+      '40',
+    );
+    expect(await bakedRockCount(page)).toBe(40);
   });
 
-  test('inner radius not less than outer radius is rejected', async ({ page }) => {
+  test('the retired inner/outer radius controls are gone', async ({ page }) => {
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+
+    // Replaced by centre + thickness (CTL-017); the ordering relation they
+    // needed is now unreachable by construction, so it is no longer validated.
+    await expect(page.locator('[data-control="asteroidInnerRadius"]')).toHaveCount(0);
+    await expect(page.locator('[data-control="asteroidOuterRadius"]')).toHaveCount(0);
+    await expect(page.locator('[data-control="asteroidCentre"]')).toHaveCount(1);
+    await expect(page.locator('[data-control="asteroidThickness"]')).toHaveCount(1);
+  });
+
+  test('the extreme band is accepted rather than rejected', async ({ page }) => {
+    await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
+
+    // Minimum centre with maximum thickness puts the inner edge at exactly 0.
+    await setValue(page.locator('[data-control="asteroidCentre"]'), '20');
+    await setValue(page.locator('[data-control="asteroidThickness"]'), '40');
+
+    await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);
+    await expect(page.locator('#preview [data-role="asteroid-cluster"]').first()).toBeVisible();
+  });
+
+  test('an out-of-range belt value is rejected and retains the scene', async ({ page }) => {
     await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
     const before = await page.locator('#preview').innerHTML();
 
-    await setValue(page.locator('[data-control="asteroidOuterRadius"]'), '40');
+    await setValue(page.locator('[data-control="asteroidCentre"]'), '111');
 
     await expect(page.locator('[data-role="errors"] li')).not.toHaveCount(0);
     expect(await page.locator('#preview').innerHTML()).toBe(before);

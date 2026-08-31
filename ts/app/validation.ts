@@ -42,9 +42,14 @@ export const BOUNDS = {
   ringSize: { min: 140, max: 300 },
   ringInclination: { min: 5, max: 60 },
   asteroidCount: { min: 10, max: 500 },
-  asteroidInnerRadius: { min: 10, max: 99 },
-  asteroidOuterRadius: { min: 11, max: 100 },
-  asteroidSize: { min: 1, max: 10 },
+  // Proportional belt geometry (CTL-017, CTL-018): percentages of the drawable
+  // half-extent, the same reference orbital distance and planet size use. The
+  // centre/thickness pair is bounded so that the minimum centre with the
+  // maximum thickness yields an inner edge of exactly 0, which is why no
+  // cross-field ordering relation is enforced.
+  asteroidSize: { min: 0.2, max: 3, step: 0.1 },
+  asteroidCentre: { min: 20, max: 110 },
+  asteroidThickness: { min: 1, max: 40 },
   asteroidPeriod: { min: 30, max: 600 },
   seed: { min: 0, max: 4_294_967_295 },
 } as const satisfies Record<string, Bound>;
@@ -92,9 +97,12 @@ export interface RawAsteroidBeltConfig {
   /** Authored belt character; omitted yields the documented default. */
   type?: string;
   count: string;
-  innerRadiusPercent: string;
-  outerRadiusPercent: string;
-  size: string;
+  /** Base rock radius as a percentage of the drawable half-extent. */
+  sizePercent: string;
+  /** Band centre radius as a percentage of the drawable half-extent. */
+  centrePercent: string;
+  /** Band thickness as a percentage of the drawable half-extent. */
+  thicknessPercent: string;
   period: string;
 }
 
@@ -124,8 +132,7 @@ export type ValidationField =
   | 'sunType'
   | 'distanceForm'
   | 'ringType'
-  | 'beltType'
-  | 'asteroidRadiusRelation';
+  | 'beltType';
 
 export interface ValidationError {
   field: ValidationField;
@@ -153,9 +160,9 @@ const LABELS: Record<BoundedField, string> = {
   ringSize: 'Ring size',
   ringInclination: 'Ring inclination',
   asteroidCount: 'Asteroid count',
-  asteroidInnerRadius: 'Asteroid inner radius',
-  asteroidOuterRadius: 'Asteroid outer radius',
   asteroidSize: 'Asteroid size',
+  asteroidCentre: 'Belt centre radius',
+  asteroidThickness: 'Belt thickness',
   asteroidPeriod: 'Asteroid rotation period',
   seed: 'Seed',
 };
@@ -170,6 +177,15 @@ function parseBounded(
   const step = stepOf(field);
   const label = context === '' ? LABELS[field] : `${LABELS[field]} for ${context}`;
   const range = `${bound.min} to ${bound.max}`;
+
+  // Validation is the boundary: a caller passing a shape that predates a
+  // parameter rename must be REJECTED, never allowed to throw. Reading `.trim()`
+  // off an absent field crashed the whole submission instead of reporting it.
+  if (typeof raw !== 'string') {
+    errors.push({ field, message: `${label} is required. Enter a value from ${range}.` });
+    return null;
+  }
+
   const trimmed = raw.trim();
 
   if (trimmed === '') {
@@ -343,9 +359,117 @@ function parseRing(
     : { type, sizePercent, inclinationDegrees };
 }
 
+/**
+ * The drawable half-extent the belt's authored size and density are stated
+ * against: the default 600x600 canvas. At this reference the authored values
+ * render verbatim (CTL-019).
+ */
+const BELT_REFERENCE_HALF_EXTENT = 300;
+
+/**
+ * Damping exponent applied to belt rock size across canvas sizes.
+ *
+ * `1` would make a rock a fixed share of the scene, which is geometrically
+ * consistent but reads wrong: a larger canvas is a WIDER VIEW of the system, so
+ * it should show more asteroids, not bigger ones. At the maximum canvas a fully
+ * proportional rock renders at 10.4px against 4.2px on the default canvas.
+ * `0` is the retired absolute model, whose presence collapsed 6x (AB-D1).
+ *
+ * `0.5` is the same sublinear shape the ambient starfield already uses above
+ * its damping knee: the rock grows to 6.6px while the count carries the rest of
+ * the density.
+ */
+const BELT_SIZE_DAMPING = 0.5;
+
+/**
+ * Ceiling on rendered rocks.
+ *
+ * Rendered element count drives animation cadence, exactly as it does for the
+ * ambient starfield. MEASURED in Chromium at 1500x1500 via
+ * `e2e/browser/belt-cap-measure.spec.ts` against the 50fps budget:
+ *
+ * |    rocks | nodes   |  fps |
+ * |---------:|--------:|-----:|
+ * |      325 |   7,508 | 60.9 |
+ * |    1,250 |   8,429 | 60.7 |
+ * |    2,600 |   9,795 | 61.0 |  <- this cap
+ * |    5,200 |  12,395 | 56.7 |
+ * |   20,800 |  27,995 | 35.6 |  <- below budget
+ * |  124,800 | 131,995 |  0.5 |
+ *
+ * The cap sits about a factor of two below the measured degradation point, so
+ * the worst configuration the product can author still renders at ~61fps. It
+ * MUST NOT be raised without repeating that sweep; node-count reasoning alone
+ * is not evidence.
+ */
+export const BELT_RENDER_CAP = 2_600;
+
+/**
+ * Resolve the authored base rock radius, damped by `BELT_SIZE_DAMPING`.
+ *
+ * At the damping exponent `k` this is the weighted geometric mean of the
+ * reference half-extent and the actual one, so `k = 0` yields the absolute
+ * model and `k = 1` the fully proportional one.
+ */
+function resolveBeltRockRadius(sizePercent: number, reference: number): number {
+  const damped =
+    Math.pow(BELT_REFERENCE_HALF_EXTENT, 1 - BELT_SIZE_DAMPING) *
+    Math.pow(reference, BELT_SIZE_DAMPING);
+
+  return resolvePercent(sizePercent, damped);
+}
+
+/**
+ * Resolve the authored count into the number of rocks actually rendered.
+ *
+ * The authored count expresses a density, not a literal element count, and it
+ * carries whatever presence the damped rock size does not. Two terms:
+ *
+ * - Canvas. Coverage goes as `count * rockRadius^2 / halfExtent^2`, and the
+ *   damped radius grows as `halfExtent^k`, so holding coverage fixed needs
+ *   `count ∝ halfExtent^(2 - 2k)`. The exponent is DERIVED from the damping
+ *   constant rather than written out, so the two cannot drift apart and
+ *   silently break coverage.
+ * - Band. The annulus area `(c + t/2)^2 - (c - t/2)^2` reduces exactly to
+ *   `2ct`, so widening or moving the band scales the count by `c * t` against
+ *   the shipped default band. Without this, a wide band thins out at a fixed
+ *   count.
+ */
+function resolveBeltCount(
+  count: number,
+  centrePercent: number,
+  thicknessPercent: number,
+  reference: number,
+): number {
+  const canvasFactor = Math.pow(
+    reference / BELT_REFERENCE_HALF_EXTENT,
+    2 - 2 * BELT_SIZE_DAMPING,
+  );
+  const bandFactor =
+    (centrePercent * thicknessPercent) /
+    (BELT_DEFAULT_CENTRE_PERCENT * BELT_DEFAULT_THICKNESS_PERCENT);
+
+  return Math.min(
+    BELT_RENDER_CAP,
+    Math.max(1, Math.round(count * canvasFactor * bandFactor)),
+  );
+}
+
+/** The shipped default band, which the authored count is a density against. */
+const BELT_DEFAULT_CENTRE_PERCENT = 84;
+const BELT_DEFAULT_THICKNESS_PERCENT = 6;
+
+/**
+ * Belt geometry is proportional (CTL-017): size, centre, and thickness are
+ * percentages of the drawable half-extent, resolved here so the generator keeps
+ * receiving absolute units. The centre/thickness pair replaces the retired
+ * inner/outer radii, and the CTL-018 bounds guarantee a well-formed band, so no
+ * cross-field ordering relation is checked.
+ */
 function parseAsteroidBelt(
   raw: RawAsteroidBeltInput | undefined,
   errors: ValidationError[],
+  reference: number | null,
 ): (AsteroidBeltConfig & { type: BeltType }) | false | undefined | null {
   if (raw === undefined || raw === false) {
     return raw;
@@ -362,38 +486,39 @@ function parseAsteroidBelt(
   }
 
   const count = parseBounded(raw.count, 'asteroidCount', errors);
-  const innerRadiusPercent = parseBounded(
-    raw.innerRadiusPercent,
-    'asteroidInnerRadius',
+  const sizePercent = parseBounded(raw.sizePercent, 'asteroidSize', errors);
+  const centrePercent = parseBounded(raw.centrePercent, 'asteroidCentre', errors);
+  const thicknessPercent = parseBounded(
+    raw.thicknessPercent,
+    'asteroidThickness',
     errors,
   );
-  const outerRadiusPercent = parseBounded(
-    raw.outerRadiusPercent,
-    'asteroidOuterRadius',
-    errors,
-  );
-  const size = parseBounded(raw.size, 'asteroidSize', errors);
   const period = parseBounded(raw.period, 'asteroidPeriod', errors);
-  const invalidRelation = innerRadiusPercent !== null &&
-    outerRadiusPercent !== null &&
-    innerRadiusPercent >= outerRadiusPercent;
 
-  if (invalidRelation) {
-    errors.push({
-      field: 'asteroidRadiusRelation',
-      message: 'Asteroid inner radius must be less than asteroid outer radius.',
-    });
-  }
-
-  return count === null ||
-    innerRadiusPercent === null ||
-    outerRadiusPercent === null ||
-    size === null ||
+  if (
+    count === null ||
+    sizePercent === null ||
+    centrePercent === null ||
+    thicknessPercent === null ||
     period === null ||
     type === null ||
-    invalidRelation
-    ? null
-    : { type, count, innerRadiusPercent, outerRadiusPercent, size, period };
+    reference === null
+  ) {
+    return null;
+  }
+
+  // Resolution is deliberately NOT rounded, consistent with CTL-015.
+  const centreRadius = resolvePercent(centrePercent, reference);
+  const halfThickness = resolvePercent(thicknessPercent, reference) / 2;
+
+  return {
+    type,
+    count: resolveBeltCount(count, centrePercent, thicknessPercent, reference),
+    baseRadius: resolveBeltRockRadius(sizePercent, reference),
+    innerRadius: centreRadius - halfThickness,
+    outerRadius: centreRadius + halfThickness,
+    period,
+  };
 }
 
 export function validateScene(input: RawSceneInput): ValidationResult {
@@ -401,7 +526,6 @@ export function validateScene(input: RawSceneInput): ValidationResult {
   const width = parseBounded(input.canvasWidth, 'canvasWidth', errors);
   const height = parseBounded(input.canvasHeight, 'canvasHeight', errors);
   const seed = parseBounded(input.seed, 'seed', errors);
-  const asteroidBelt = parseAsteroidBelt(input.asteroidBelt, errors);
 
   const palette = input.palette === RANDOM_PALETTE
     ? undefined
@@ -434,6 +558,10 @@ export function validateScene(input: RawSceneInput): ValidationResult {
   const reference = width === null || height === null
     ? null
     : halfExtent({ width, height });
+
+  // The belt is proportional too (CTL-017), so it resolves against the same
+  // reference and only after the canvas has been validated.
+  const asteroidBelt = parseAsteroidBelt(input.asteroidBelt, errors, reference);
 
   input.planets.forEach((planet, index) => {
     const context = `planet ${index + 1}`;

@@ -57,12 +57,20 @@ export const DEFAULT_RING_CONFIG: RawRingConfig = {
 };
 
 /** Asteroid belt defaults applied when the belt is enabled. */
+/**
+ * Asteroid belt defaults applied when the belt is enabled.
+ *
+ * Authored in proportional units (CTL-018). Against the default canvas's 300
+ * unit half-extent, centre 84 / thickness 6 resolves to edges 243..261 — the
+ * band the absolute 81/87 pair produced — and size 0.7 resolves to a base
+ * radius of 2.1, within one unit of the shipped absolute 2 (CTL-019).
+ */
 export const DEFAULT_BELT: RawAsteroidBeltConfig = {
   type: DEFAULT_BELT_TYPE,
   count: '130',
-  innerRadiusPercent: '81',
-  outerRadiusPercent: '87',
-  size: '2',
+  sizePercent: '0.7',
+  centrePercent: '84',
+  thicknessPercent: '6',
   period: '163',
 };
 
@@ -134,8 +142,8 @@ const CONTROL_BOUNDS: Record<string, BoundedField> = {
   ringSize: 'ringSize',
   ringInclination: 'ringInclination',
   asteroidCount: 'asteroidCount',
-  asteroidInnerRadius: 'asteroidInnerRadius',
-  asteroidOuterRadius: 'asteroidOuterRadius',
+  asteroidCentre: 'asteroidCentre',
+  asteroidThickness: 'asteroidThickness',
   asteroidSize: 'asteroidSize',
   asteroidPeriod: 'asteroidPeriod',
 };
@@ -426,17 +434,17 @@ function beltGroup(input: RawSceneControls, open: boolean): string {
     ? `<div class="belt-body"${open ? '' : ' hidden'}>` +
       selectField('belt-type', 'Belt type', 'beltType', type, BELT_TYPES) +
       field('asteroid-count', 'Asteroid count', 'asteroidCount', belt.count, { glyph: 'size' }) +
-      field('asteroid-inner-radius', 'Inner radius', 'asteroidInnerRadius', belt.innerRadiusPercent, {
+      field('asteroid-centre', 'Belt distance', 'asteroidCentre', belt.centrePercent, {
         glyph: 'distance',
-        ariaLabel: 'Asteroid inner radius',
+        ariaLabel: 'Belt centre radius, percent of the scene half-extent',
       }) +
-      field('asteroid-outer-radius', 'Outer radius', 'asteroidOuterRadius', belt.outerRadiusPercent, {
+      field('asteroid-thickness', 'Belt thickness', 'asteroidThickness', belt.thicknessPercent, {
         glyph: 'distance',
-        ariaLabel: 'Asteroid outer radius',
+        ariaLabel: 'Belt thickness, percent of the scene half-extent',
       }) +
-      field('asteroid-size', 'Asteroid size', 'asteroidSize', belt.size, {
+      field('asteroid-size', 'Asteroid size', 'asteroidSize', belt.sizePercent, {
         glyph: 'size',
-        ariaLabel: 'Asteroid base size',
+        ariaLabel: 'Asteroid size, percent of the scene half-extent',
       }) +
       field('asteroid-period', 'Rotation period', 'asteroidPeriod', belt.period, {
         glyph: 'moonPeriod',
@@ -450,7 +458,11 @@ function beltGroup(input: RawSceneControls, open: boolean): string {
       ` aria-expanded="${open}">${open ? '▾' : '▸'}</button>`
     : '';
 
-  const summary = enabled ? `${type} belt · ${belt.count} rocks` : 'off';
+  // The summary speaks the authored units: centre and thickness, never the
+  // retired inner/outer radii (CX-022).
+  const summary = enabled
+    ? `${type} belt · ${belt.count} rocks · ${belt.centrePercent}% out · ${belt.thicknessPercent}% thick`
+    : 'off';
 
   return (
     `<div class="belt-group" data-role="asteroid-belt-group">` +
@@ -743,9 +755,9 @@ export function readControls(root: ParentNode): RawSceneControls {
       ? {
           type: readBelt('beltType', DEFAULT_BELT_TYPE),
           count: readBelt('asteroidCount', DEFAULT_BELT.count),
-          innerRadiusPercent: readBelt('asteroidInnerRadius', DEFAULT_BELT.innerRadiusPercent),
-          outerRadiusPercent: readBelt('asteroidOuterRadius', DEFAULT_BELT.outerRadiusPercent),
-          size: readBelt('asteroidSize', DEFAULT_BELT.size),
+          sizePercent: readBelt('asteroidSize', DEFAULT_BELT.sizePercent),
+          centrePercent: readBelt('asteroidCentre', DEFAULT_BELT.centrePercent),
+          thicknessPercent: readBelt('asteroidThickness', DEFAULT_BELT.thicknessPercent),
           period: readBelt('asteroidPeriod', DEFAULT_BELT.period),
         }
       : false,

@@ -379,40 +379,127 @@ function rotationCenter(rotation: Element): { x: number; y: number } | null {
 }
 
 /**
- * Rebuild the belt's rocks with `symmetry`-fold rotational symmetry: keep the
- * first `round(count / symmetry)` rocks (they arrive in angle order), then
- * replicate them `symmetry` times under a `rotate(k * 360 / symmetry)` wrapper.
- * The result is a rigid group that maps onto itself every 1/N turn (E-021).
+ * Rebuild the baked belt with `symmetry`-fold rotational symmetry (E-021).
+ *
+ * The belt serializes as opacity clusters of three tone paths whose subpaths
+ * are rocks (GEN-026), so the per-element slice the `<use>` form allowed is
+ * gone. Instead each rock is recovered as a subpath TRIPLE (silhouette,
+ * highlight, shadow share an index within their cluster), its angle about the
+ * rotation centre is computed from its silhouette's first vertex, and the
+ * first `round(count / symmetry)` rocks BY ANGLE are kept — the same angular
+ * sector the index-ordered slice used to keep. The kept rocks are re-clustered
+ * and replicated under `rotate(k * 360 / symmetry)` wrappers, producing a
+ * rigid group that maps onto itself every 1/N turn.
  */
 function redistributeRocks(
-  rocks: Element[],
+  beltInner: Element,
   symmetry: number,
   cx: number,
   cy: number,
 ): void {
-  const sectorCount = Math.max(1, Math.round(rocks.length / symmetry));
-  const base = rocks.slice(0, sectorCount);
-  const container = rocks[0]?.parentElement;
+  interface BakedRock {
+    opacity: string;
+    silhouette: string;
+    highlight: string;
+    shadow: string;
+    angle: number;
+  }
 
-  if (container === null || container === undefined) {
+  const TONES = ['silhouettes', 'highlights', 'shadows'] as const;
+  const rocks: BakedRock[] = [];
+
+  for (const cluster of beltInner.querySelectorAll('[data-role="asteroid-cluster"]')) {
+    const opacity = cluster.getAttribute('opacity') ?? '1';
+    const byTone = TONES.map((tone) => {
+      const path = cluster.querySelector(`[data-role="asteroid-${tone}"]`);
+      const d = path?.getAttribute('d') ?? '';
+
+      return d.match(/M[^M]+/g) ?? [];
+    });
+
+    const [silhouettes = [], highlights = [], shadows = []] = byTone;
+
+    for (let index = 0; index < silhouettes.length; index += 1) {
+      const silhouette = silhouettes[index]!;
+      const vertex = /M(-?[\d.]+) (-?[\d.]+)/.exec(silhouette);
+
+      if (vertex === null) {
+        continue;
+      }
+
+      const angle = Math.atan2(Number(vertex[2]) - cy, Number(vertex[1]) - cx);
+
+      rocks.push({
+        opacity,
+        silhouette,
+        highlight: highlights[index] ?? '',
+        shadow: shadows[index] ?? '',
+        angle: angle < 0 ? angle + 2 * Math.PI : angle,
+      });
+    }
+  }
+
+  if (rocks.length === 0) {
     return;
   }
 
-  const owner = container.ownerDocument;
+  rocks.sort((a, b) => a.angle - b.angle);
+
+  const sectorCount = Math.max(1, Math.round(rocks.length / symmetry));
+  const base = rocks.slice(0, sectorCount);
+
+  // Re-cluster the kept sector by opacity, preserving tone paint order and the
+  // template cluster's tone attributes (fills and the silhouette stroke).
+  const template = beltInner.querySelector('[data-role="asteroid-cluster"]');
+
+  if (template === null) {
+    return;
+  }
+
+  const toneAttributes = TONES.map((tone) => {
+    const path = template.querySelector(`[data-role="asteroid-${tone}"]`);
+
+    return [...(path?.attributes ?? [])]
+      .filter((attribute) => attribute.name !== 'd' && attribute.name !== 'data-role')
+      .map((attribute) => `${attribute.name}="${attribute.value}"`)
+      .join(' ');
+  });
+
+  const byOpacity = new Map<string, BakedRock[]>();
+
+  for (const rock of base) {
+    const group = byOpacity.get(rock.opacity);
+
+    if (group === undefined) {
+      byOpacity.set(rock.opacity, [rock]);
+    } else {
+      group.push(rock);
+    }
+  }
+
+  const sector = [...byOpacity.entries()]
+    .sort(([a], [b]) => Number(a) - Number(b))
+    .map(([opacity, group]) =>
+      `<g data-role="asteroid-cluster" opacity="${opacity}">` +
+      `<path data-role="asteroid-silhouettes" ${toneAttributes[0]} d="${group.map((rock) => rock.silhouette).join('')}"/>` +
+      `<path data-role="asteroid-highlights" ${toneAttributes[1]} d="${group.map((rock) => rock.highlight).join('')}"/>` +
+      `<path data-role="asteroid-shadows" ${toneAttributes[2]} d="${group.map((rock) => rock.shadow).join('')}"/>` +
+      `</g>`,
+    )
+    .join('');
+
+  const owner = beltInner.ownerDocument;
   const wrappers: SVGGElement[] = [];
 
   for (let k = 0; k < symmetry; k += 1) {
     const wrapper = owner.createElementNS(SVG_NAMESPACE, 'g');
+
     wrapper.setAttribute('transform', `rotate(${(k * 360) / symmetry} ${cx} ${cy})`);
-
-    for (const rock of base) {
-      wrapper.appendChild(rock.cloneNode(true));
-    }
-
+    wrapper.innerHTML = sector;
     wrappers.push(wrapper);
   }
 
-  container.replaceChildren(...wrappers);
+  beltInner.replaceChildren(...wrappers);
 }
 
 /** Apply the belt loop plan to a live belt group, or null when inapplicable. */
@@ -426,9 +513,15 @@ function applyBeltLoop(
     return null;
   }
 
-  const rocks = Array.from(beltGroup.querySelectorAll('use[data-role="asteroid"]'));
+  // Rock count from the baked belt: the generator stamps `data-count`, and the
+  // silhouette subpath count is the independent check the tests hold it to.
+  const stamped = Number(beltGroup.getAttribute('data-count'));
+  const rockCount = Number.isFinite(stamped) && stamped > 0
+    ? stamped
+    : [...beltGroup.querySelectorAll('[data-role="asteroid-silhouettes"]')]
+        .reduce((sum, path) => sum + ((path.getAttribute('d') ?? '').match(/M/g)?.length ?? 0), 0);
 
-  if (rocks.length === 0) {
+  if (rockCount === 0) {
     return null;
   }
 
@@ -438,9 +531,14 @@ function applyBeltLoop(
     return null;
   }
 
-  const plan = findBeltLoop(authored, rocks.length);
+  const plan = findBeltLoop(authored, rockCount);
+  const beltInner = beltGroup.querySelector('g[id]');
 
-  redistributeRocks(rocks, plan.symmetry, center.x, center.y);
+  if (beltInner === null) {
+    return null;
+  }
+
+  redistributeRocks(beltInner, plan.symmetry, center.x, center.y);
 
   // Fine-tune: the belt now completes `symmetry` sectors in
   // `loopPeriod * symmetry` seconds, so its effective period is exactly

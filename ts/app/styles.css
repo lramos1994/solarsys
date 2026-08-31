@@ -867,6 +867,25 @@ input[aria-invalid="true"] {
   opacity: 0.6;
 }
 
+/* The belt band edges and its orbital centre line (CX-019, CX-023). The two
+   are distinguished GEOMETRICALLY — the edges are finely dashed, the centre
+   line is solid — never by colour alone (UI-008). */
+.preview-surface [data-role="belt-band-inner"],
+.preview-surface [data-role="belt-band-outer"] {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1;
+  stroke-dasharray: 4 5;
+  opacity: 0.4;
+}
+
+.preview-surface [data-role="belt-band-centre"] {
+  fill: none;
+  stroke: #ffffff;
+  stroke-width: 1.4;
+  opacity: 0.55;
+}
+
 /* ----------------------------------------------------------- orbit mode */
 
 .orbit-mode {

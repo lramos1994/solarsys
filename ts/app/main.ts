@@ -146,6 +146,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `<g data-role="belt-band">` +
     `<ellipse data-role="belt-band-inner" fill="none" />` +
     `<ellipse data-role="belt-band-outer" fill="none" />` +
+    `<ellipse data-role="belt-band-centre" fill="none" />` +
     `</g>` +
     `<path data-role="active-orbit-path" fill="none" />` +
     `<path data-role="active-moon-orbit-path" fill="none" />` +
@@ -168,6 +169,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const beltBand = root.querySelector<SVGGElement>('[data-role="belt-band"]');
   const beltBandInner = root.querySelector<SVGEllipseElement>('[data-role="belt-band-inner"]');
   const beltBandOuter = root.querySelector<SVGEllipseElement>('[data-role="belt-band-outer"]');
+  const beltBandCentre = root.querySelector<SVGEllipseElement>('[data-role="belt-band-centre"]');
   const errorList = root.querySelector<HTMLElement>('[data-role="errors"]');
 
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
@@ -300,7 +302,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
 
     beltBand.style.display = 'none';
 
-    for (const ellipse of [beltBandInner, beltBandOuter]) {
+    for (const ellipse of [beltBandInner, beltBandOuter, beltBandCentre]) {
       ellipse?.removeAttribute('cx');
       ellipse?.removeAttribute('cy');
       ellipse?.removeAttribute('rx');
@@ -334,17 +336,34 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     const offset = CANVAS_MARGIN / 2;
     const cx = width / 2 + offset;
     const cy = height / 2 + offset;
-    const innerPct = Number(belt.innerRadiusPercent) || 0;
-    const outerPct = Number(belt.outerRadiusPercent) || 0;
 
-    beltBandInner.setAttribute('cx', String(cx));
-    beltBandInner.setAttribute('cy', String(cy));
-    beltBandInner.setAttribute('rx', String((width / 2) * innerPct / 100));
-    beltBandInner.setAttribute('ry', String((height / 2) * innerPct / 100));
-    beltBandOuter.setAttribute('cx', String(cx));
-    beltBandOuter.setAttribute('cy', String(cy));
-    beltBandOuter.setAttribute('rx', String((width / 2) * outerPct / 100));
-    beltBandOuter.setAttribute('ry', String((height / 2) * outerPct / 100));
+    // The band is a circular annulus on the drawable half-extent, matching the
+    // geometry the generator actually renders (GEN-023, CX-019). Resolving per
+    // axis here would redraw the retired ellipse and disagree with the scene.
+    const reference = Math.min(width, height) / 2;
+    const centre = (Number(belt.centrePercent) || 0) * reference / 100;
+    const halfThickness = (Number(belt.thicknessPercent) || 0) * reference / 100 / 2;
+    const inner = centre - halfThickness;
+    const outer = centre + halfThickness;
+
+    for (const [ellipse, radius] of [
+      [beltBandInner, inner],
+      [beltBandOuter, outer],
+    ] as const) {
+      ellipse.setAttribute('cx', String(cx));
+      ellipse.setAttribute('cy', String(cy));
+      ellipse.setAttribute('rx', String(Math.max(0, radius)));
+      ellipse.setAttribute('ry', String(Math.max(0, radius)));
+    }
+
+    // The belt's orbital centre line (CX-023). Distinguished from the band
+    // edges geometrically, never by colour alone.
+    if (beltBandCentre !== null) {
+      beltBandCentre.setAttribute('cx', String(cx));
+      beltBandCentre.setAttribute('cy', String(cy));
+      beltBandCentre.setAttribute('rx', String(Math.max(0, centre)));
+      beltBandCentre.setAttribute('ry', String(Math.max(0, centre)));
+    }
 
     beltBand.style.display = '';
   }

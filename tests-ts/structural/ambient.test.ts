@@ -118,31 +118,58 @@ describe('asteroid belt', () => {
   it('honours authored count, size band, radial band, and period', () => {
     const markup = belt(42, {
       count: 12,
-      innerRadiusPercent: 40,
-      outerRadiusPercent: 60,
-      size: 4,
+      // Absolute units: the control boundary resolves percentages (CTL-017).
+      innerRadius: 60,
+      outerRadius: 90,
+      baseRadius: 4,
       period: 77,
     });
     const document = parse(markup);
-    const asteroids = [...document.querySelectorAll('use[data-role="asteroid"]')];
     const rotation = document.querySelector('[data-role="asteroid-belt"] animateTransform');
 
-    expect(asteroids).toHaveLength(12);
+    // Baked form (GEN-026): rocks are silhouette subpaths, one per rock.
+    const silhouettes = [...document.querySelectorAll('[data-role="asteroid-silhouettes"]')]
+      .flatMap((path) => (path.getAttribute('d') ?? '').match(/M[^M]+/g) ?? []);
+
+    expect(silhouettes).toHaveLength(12);
     expect(rotation?.getAttribute('dur')).toBe('77s');
 
-    for (const asteroid of asteroids) {
-      const transform = asteroid.getAttribute('transform') ?? '';
-      const scale = Number(/scale\(([^)]+)\)/.exec(transform)?.[1]);
+    for (const subpath of silhouettes) {
+      const vertices = [...subpath.matchAll(/[ML](-?[\d.]+) (-?[\d.]+)/g)]
+        .map((m) => [Number(m[1]), Number(m[2])] as const);
+      const cx = vertices.reduce((sum, [x]) => sum + x, 0) / vertices.length;
+      const cy = vertices.reduce((sum, [, y]) => sum + y, 0) / vertices.length;
+      const meanRadius = vertices
+        .reduce((sum, [x, y]) => sum + Math.hypot(x - cx, y - cy), 0) / vertices.length;
 
-      expect(scale).toBeGreaterThanOrEqual(2.2);
-      expect(scale).toBeLessThanOrEqual(5.2);
+      // The size band spans 40..180 percent of baseRadius 4 (GEN-009). The
+      // silhouette's mean vertex radius is scale * ~0.85 (rocky unit shapes),
+      // so the rendered bound is scale 1.6..7.2 times 0.73..0.99 unit radius.
+      expect(meanRadius).toBeGreaterThanOrEqual(1.6 * 0.7);
+      expect(meanRadius).toBeLessThanOrEqual(7.2 * 1.0);
     }
   });
 
-  it('renders asteroid bodies', () => {
+  it('renders asteroid bodies on both serializations', () => {
+    // Legacy no-config path keeps the historical <use>-per-rock form.
     expect(
       parse(belt()).querySelectorAll('use[data-role="asteroid"]').length,
     ).toBeGreaterThan(0);
+
+    // The authored path is baked (GEN-026): silhouette subpaths are the rocks.
+    const baked = parse(
+      belt(42, {
+        count: 12,
+        innerRadius: 60,
+        outerRadius: 90,
+        baseRadius: 4,
+        period: 77,
+      }),
+    );
+    const subpaths = [...baked.querySelectorAll('[data-role="asteroid-silhouettes"]')]
+      .flatMap((path) => (path.getAttribute('d') ?? '').match(/M/g) ?? []);
+
+    expect(subpaths.length).toBe(12);
   });
 
   it('rotates as a single rigid group', () => {
@@ -159,6 +186,17 @@ describe('asteroid belt', () => {
 
     for (const asteroid of document.querySelectorAll('use[data-role="asteroid"]')) {
       expect(asteroid.closest('g[data-role="asteroid-belt"]')).not.toBeNull();
+    }
+
+    // Baked form: every cluster sits inside the rotating belt group too.
+    const baked = parse(
+      belt(42, { count: 12, innerRadius: 60, outerRadius: 90, baseRadius: 4, period: 77 }),
+    );
+    const clusters = [...baked.querySelectorAll('[data-role="asteroid-cluster"]')];
+
+    expect(clusters.length).toBeGreaterThan(0);
+    for (const cluster of clusters) {
+      expect(cluster.closest('g[data-role="asteroid-belt"]')).not.toBeNull();
     }
   });
 

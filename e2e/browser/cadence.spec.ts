@@ -3,6 +3,8 @@ import { expect, test, type Page } from '@playwright/test';
 const DEFAULT_CANVAS = 600;
 const MAXIMUM_CANVAS = 1500;
 const SAMPLE_DURATION_MS = 2_000;
+import { BELT_RENDER_CAP } from '../../ts/app/validation';
+
 const MINIMUM_FPS = 50;
 const BELT_TYPES = ['rocky', 'icy', 'metallic'] as const;
 
@@ -53,11 +55,8 @@ function channelContrast(a: string, b: string): ChannelContrast {
 async function requireDenseBeltDetail(page: Page): Promise<{
   selectedType: string;
   asteroidCount: number;
-  symbolCount: number;
-  highlightCount: number;
-  shadowCount: number;
-  silhouetteCount: number;
-  firstSymbolLayers: string[];
+  clusterCount: number;
+  toneOrder: string[];
   silhouetteFill: string;
   highlightFill: string;
   shadowFill: string;
@@ -66,8 +65,8 @@ async function requireDenseBeltDetail(page: Page): Promise<{
   return page.evaluate(() => {
     const select = document.querySelector<HTMLSelectElement>('[data-control="beltType"]');
     const belt = document.querySelector<SVGGElement>('#preview [data-role="asteroid-belt"]');
-    const asteroids = [...document.querySelectorAll<SVGUseElement>('#preview [data-role="asteroid"]')];
-    const symbols = [...document.querySelectorAll<SVGGElement>('#preview [data-role="asteroid-symbol"]')];
+    // Baked form (GEN-026): rocks are silhouette subpaths in opacity clusters.
+    const clusters = [...document.querySelectorAll<SVGGElement>('#preview [data-role="asteroid-cluster"]')];
 
     if (select === null) {
       throw new Error('Cannot inspect belt detail: the belt type control is missing.');
@@ -77,57 +76,64 @@ async function requireDenseBeltDetail(page: Page): Promise<{
       throw new Error('Cannot inspect belt detail: the asteroid belt did not render.');
     }
 
-    if (symbols.length === 0) {
-      throw new Error('Cannot inspect belt detail: no asteroid symbols rendered.');
+    if (clusters.length === 0) {
+      throw new Error('Cannot inspect belt detail: no asteroid clusters rendered.');
     }
 
-    if (asteroids.length === 0) {
+    const subpathCount = (path: Element | null): number =>
+      (path?.getAttribute('d') ?? '').split('M').length - 1;
+
+    const asteroidCount = clusters.reduce(
+      (sum, cluster) =>
+        sum + subpathCount(cluster.querySelector('[data-role="asteroid-silhouettes"]')),
+      0,
+    );
+
+    if (asteroidCount === 0) {
       throw new Error('Cannot inspect belt detail: no asteroid bodies rendered.');
     }
 
-    const first = symbols[0]!;
-    const silhouette = first.querySelector<SVGPolygonElement>('[data-role="asteroid-silhouette"]');
-    const highlight = first.querySelector<SVGPolygonElement>('[data-role="asteroid-highlight"]');
-    const shadow = first.querySelector<SVGPolygonElement>('[data-role="asteroid-shadow"]');
+    const stamped = Number(belt.getAttribute('data-count'));
 
-    if (silhouette === null || highlight === null || shadow === null) {
-      throw new Error('Cannot inspect belt detail: the first asteroid symbol is incomplete.');
+    if (stamped !== asteroidCount) {
+      throw new Error(
+        `Cannot trust belt detail: data-count=${stamped} but ${asteroidCount} silhouettes rendered.`,
+      );
     }
 
-    const silhouetteFill = getComputedStyle(silhouette).fill;
-    const highlightFill = getComputedStyle(highlight).fill;
-    const shadowFill = getComputedStyle(shadow).fill;
-    const firstSymbolLayers = [...first.children].map((node) =>
+    const first = clusters[0]!;
+    const silhouettes = first.querySelector<SVGPathElement>('[data-role="asteroid-silhouettes"]');
+    const highlights = first.querySelector<SVGPathElement>('[data-role="asteroid-highlights"]');
+    const shadows = first.querySelector<SVGPathElement>('[data-role="asteroid-shadows"]');
+
+    if (silhouettes === null || highlights === null || shadows === null) {
+      throw new Error('Cannot inspect belt detail: the first cluster is missing a tone path.');
+    }
+
+    const silhouetteFill = getComputedStyle(silhouettes).fill;
+    const highlightFill = getComputedStyle(highlights).fill;
+    const shadowFill = getComputedStyle(shadows).fill;
+    const toneOrder = [...first.children].map((node) =>
       node.getAttribute('data-role') ?? node.tagName,
     );
-    const highlightCount = document.querySelectorAll('#preview [data-role="asteroid-highlight"]').length;
-    const shadowCount = document.querySelectorAll('#preview [data-role="asteroid-shadow"]').length;
-    const silhouetteCount = document.querySelectorAll('#preview [data-role="asteroid-silhouette"]').length;
-    const sampleBodies = asteroids.slice(0, 3).map((node) => {
+
+    const sampleBodies = clusters.slice(0, 3).map((node) => {
       const box = node.getBoundingClientRect();
 
-      return {
-        x: box.x,
-        y: box.y,
-        width: box.width,
-        height: box.height,
-      };
+      return { x: box.x, y: box.y, width: box.width, height: box.height };
     });
 
     if (sampleBodies.some((box) => box.width <= 0 || box.height <= 0)) {
       throw new Error(
-        `Cannot inspect belt detail: representative asteroid bodies did not render measurable geometry (${JSON.stringify(sampleBodies)}).`,
+        `Cannot inspect belt detail: representative clusters did not render measurable geometry (${JSON.stringify(sampleBodies)}).`,
       );
     }
 
     return {
       selectedType: select.value,
-      asteroidCount: asteroids.length,
-      symbolCount: symbols.length,
-      highlightCount,
-      shadowCount,
-      silhouetteCount,
-      firstSymbolLayers,
+      asteroidCount,
+      clusterCount: clusters.length,
+      toneOrder,
       silhouetteFill,
       highlightFill,
       shadowFill,
@@ -226,7 +232,7 @@ test.describe('configurable asteroid belt cadence (GEN-018)', () => {
 
     const beltEvidenceByType: Array<
       ReturnType<typeof channelContrast> &
-      { type: BeltType; selectedType: string; asteroidCount: number; symbolCount: number; sampleBodies: Array<{ x: number; y: number; width: number; height: number }>; }
+      { type: BeltType; selectedType: string; asteroidCount: number; clusterCount: number; sampleBodies: Array<{ x: number; y: number; width: number; height: number }>; }
     > = [];
 
     for (const type of BELT_TYPES) {
@@ -234,8 +240,15 @@ test.describe('configurable asteroid belt cadence (GEN-018)', () => {
       const evidence = await requireDenseBeltDetail(page);
 
       expect(evidence.selectedType).toBe(type);
-      expect(evidence.asteroidCount).toBe(500);
-      expect(evidence.symbolCount).toBeGreaterThan(0);
+      // The authored count is a DENSITY (GEN-024): at 1500x1500 it resolves to
+      // an area-compensated effective count, so it is deliberately not 500.
+      expect(evidence.asteroidCount).toBeGreaterThan(500);
+      expect(evidence.clusterCount).toBeGreaterThan(0);
+      expect(evidence.toneOrder).toEqual([
+        'asteroid-silhouettes',
+        'asteroid-highlights',
+        'asteroid-shadows',
+      ]);
       expect(evidence.sampleBodies.length).toBeGreaterThan(0);
 
       const silhouetteHighlight = channelContrast(evidence.silhouetteFill, evidence.highlightFill);
@@ -264,14 +277,23 @@ test.describe('configurable asteroid belt cadence (GEN-018)', () => {
         type,
         selectedType: evidence.selectedType,
         asteroidCount: evidence.asteroidCount,
-        symbolCount: evidence.symbolCount,
+        clusterCount: evidence.clusterCount,
         sampleBodies: evidence.sampleBodies,
         ...silhouetteHighlight,
       });
     }
 
-    const asteroids = await page.locator('#preview [data-role="asteroid"]').count();
-    expect(asteroids).toBe(500);
+    // Baked form: the rendered rock count is the silhouette subpath total,
+    // already cross-checked against data-count by requireDenseBeltDetail.
+    const asteroids = await page.evaluate(() =>
+      [...document.querySelectorAll('#preview [data-role="asteroid-silhouettes"]')]
+        .reduce((sum, path) => sum + ((path.getAttribute('d') ?? '').split('M').length - 1), 0),
+    );
+
+    // This is the measurement that sets BELT_RENDER_CAP (task 2.7). The count
+    // must never exceed the cap, and the cap must hold the cadence budget.
+    expect(asteroids).toBeLessThanOrEqual(BELT_RENDER_CAP);
+    expect(asteroids).toBeGreaterThan(500);
 
     const cadence = await measureCadence(page);
 

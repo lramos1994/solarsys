@@ -134,9 +134,9 @@ const NUMERIC_CASES = [
   },
   ...([
     ['asteroidCount', 'count'],
-    ['asteroidInnerRadius', 'innerRadiusPercent'],
-    ['asteroidOuterRadius', 'outerRadiusPercent'],
-    ['asteroidSize', 'size'],
+    ['asteroidCentre', 'centrePercent'],
+    ['asteroidThickness', 'thicknessPercent'],
+    ['asteroidSize', 'sizePercent'],
     ['asteroidPeriod', 'period'],
   ] as const).map(([field, property]) => ({
     field,
@@ -144,9 +144,9 @@ const NUMERIC_CASES = [
     build: (value: string) => input({
       asteroidBelt: {
         count: '130',
-        innerRadiusPercent: property === 'outerRadiusPercent' ? '10' : '40',
-        outerRadiusPercent: property === 'innerRadiusPercent' ? '100' : '80',
-        size: '2',
+        sizePercent: '0.7',
+        centrePercent: '84',
+        thicknessPercent: '6',
         period: '163',
         [property]: value,
       },
@@ -161,8 +161,8 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
         'canvasHeight',
         'canvasWidth',
         'asteroidCount',
-        'asteroidInnerRadius',
-        'asteroidOuterRadius',
+        'asteroidCentre',
+        'asteroidThickness',
         'asteroidPeriod',
         'asteroidSize',
         'moonDistance',
@@ -194,9 +194,9 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
     expect(BOUNDS.ringSize).toEqual({ min: 140, max: 300 });
     expect(BOUNDS.ringInclination).toEqual({ min: 5, max: 60 });
     expect(BOUNDS.asteroidCount).toEqual({ min: 10, max: 500 });
-    expect(BOUNDS.asteroidInnerRadius).toEqual({ min: 10, max: 99 });
-    expect(BOUNDS.asteroidOuterRadius).toEqual({ min: 11, max: 100 });
-    expect(BOUNDS.asteroidSize).toEqual({ min: 1, max: 10 });
+    expect(BOUNDS.asteroidSize).toEqual({ min: 0.2, max: 3, step: 0.1 });
+    expect(BOUNDS.asteroidCentre).toEqual({ min: 20, max: 110 });
+    expect(BOUNDS.asteroidThickness).toEqual({ min: 1, max: 40 });
     expect(BOUNDS.asteroidPeriod).toEqual({ min: 30, max: 600 });
     expect(BOUNDS.seed).toEqual({ min: 0, max: 4_294_967_295 });
   });
@@ -257,9 +257,9 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
 describe('belt type (CTL-012)', () => {
   const belt = (type?: string): RawAsteroidBeltConfig => ({
     count: '130',
-    innerRadiusPercent: '40',
-    outerRadiusPercent: '80',
-    size: '2',
+    sizePercent: '0.7',
+    centrePercent: '84',
+    thicknessPercent: '6',
     period: '163',
     ...(type === undefined ? {} : { type }),
   });
@@ -568,9 +568,9 @@ describe('rejection semantics', () => {
       }],
       asteroidBelt: {
         count: '501',
-        innerRadiusPercent: '80',
-        outerRadiusPercent: '80',
-        size: '11',
+        sizePercent: '3.1',
+        centrePercent: '111',
+        thicknessPercent: '41',
         period: '29',
       },
     } as unknown as Partial<RawSceneInput>));
@@ -584,8 +584,9 @@ describe('rejection semantics', () => {
           'ringSize',
           'ringInclination',
           'asteroidCount',
-          'asteroidRadiusRelation',
           'asteroidSize',
+          'asteroidCentre',
+          'asteroidThickness',
           'asteroidPeriod',
         ]),
       );

@@ -42,9 +42,9 @@ function customPlanet(
 const ICY_BELT: RawAsteroidBeltConfig = {
   type: 'icy',
   count: '130',
-  innerRadiusPercent: '81',
-  outerRadiusPercent: '87',
-  size: '2',
+  sizePercent: '0.7',
+  centrePercent: '84',
+  thicknessPercent: '6',
   period: '163',
 };
 
