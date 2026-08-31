@@ -898,7 +898,12 @@ input[aria-invalid="true"] {
   display: flex;
   align-items: center;
   gap: var(--space-1);
-  min-height: 18px;
+  /* At or above the 24px minimum target size (CD-005): the label itself is
+     the clickable hit area (native label-for-input activation), so padding
+     it out — not just the radio dot — is what satisfies the Lighthouse
+     target-size audit and keeps the two options from crowding each other. */
+  min-height: 24px;
+  padding: var(--space-1) var(--space-1);
   cursor: pointer;
   font-size: 0.72rem;
   color: var(--chrome-text-muted);
@@ -909,6 +914,7 @@ input[aria-invalid="true"] {
   width: 14px;
   height: 14px;
   margin: 0;
+  flex: 0 0 auto;
   border: 1px solid var(--chrome-line-strong);
   border-radius: 50%;
   cursor: pointer;
