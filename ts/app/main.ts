@@ -21,31 +21,17 @@ import { createSceneStore } from './store';
 import { CANVAS_MARGIN } from '../generator/document';
 import { generatePlanetPreview } from '../generator/preview';
 import { validateScene, type RawSceneInput } from './validation';
-import {
-  downloadWallpaperBlob,
-  encodeWallpaper,
-  WallpaperUnavailableError,
-  wallpaperEncodingAvailable,
-  WALLPAPER_FRAME_COUNT,
-  wallpaperFilename,
-  wallpaperPreset,
-  type WallpaperPreset,
-} from './wallpaper';
 
 /**
- * Test seams (WAL-006). The interaction suite drives the production bundle,
- * where module internals are unreachable, so two narrow hooks are exposed:
+ * Test seam. The interaction suite drives the production bundle, where module
+ * internals are unreachable, so a narrow generator-counter hook is exposed:
  *
- *  - `__solarsysGenerationCount` reads the generator call counter (task 4.3),
- *    letting a test prove an export never regenerates the scene.
- *  - `__WALLPAPER_FRAME_COUNT__` overrides the export frame budget (task 4.2),
- *    so a test can exercise the full encode + download path without waiting out
- *    the multi-minute production render.
+ *  - `__solarsysGenerationCount` reads the generator call counter without
+ *    exposing mutable store state.
  */
 declare global {
   interface Window {
     __solarsysGenerationCount?: () => number;
-    __WALLPAPER_FRAME_COUNT__?: number;
   }
 }
 
@@ -147,27 +133,13 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `<div class="stage-heading-copy">` +
     `<p class="eyebrow">Live observatory</p><h2>Generated scene</h2>` +
     `</div>` +
-    `<button type="button" class="wallpaper-guidance-trigger" data-action="show-wallpaper-guidance">` +
-    `${icon('info')}<span>How to apply</span></button>` +
     `<div class="stage-actions" data-role="instrument-actions" aria-label="Scene actions">` +
     `<button type="button" data-action="toggle-playback">` +
     `${icon('pause')}<span data-role="playback-label">Pause animation</span></button>` +
     `<button type="button" data-action="download-svg">` +
     `${icon('download')}<span>Download SVG</span></button>` +
-    `<select class="wallpaper-preset" data-role="wallpaper-preset" aria-label="Wallpaper size">` +
-    `<option value="android">Android 1080×2400</option>` +
-    `<option value="iphone">iPhone 1179×2556</option>` +
-    `</select>` +
-    `<button type="button" data-action="download-wallpaper">` +
-    `${icon('smartphone')}<span>Export video</span></button>` +
     `</div>` +
     `</header>` +
-    `<p data-role="wallpaper-status" role="status" aria-live="polite" hidden></p>` +
-    `<div class="wallpaper-progress" data-role="wallpaper-progress" role="progressbar"` +
-    ` aria-valuemin="0" aria-valuemax="${WALLPAPER_FRAME_COUNT}" aria-valuenow="0" hidden>` +
-    `<span class="wallpaper-progress-track" aria-hidden="true"><span class="wallpaper-progress-fill"></span></span>` +
-    `<span data-role="wallpaper-progress-label">Rendering… 0%</span>` +
-    `</div>` +
     `<div class="preview-surface">` +
     `<div id="preview"></div>` +
     `<svg data-role="orbit-emphasis" aria-hidden="true" focusable="false">` +
@@ -184,18 +156,6 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     `Your system asks for reduced motion, so the scene starts paused. ` +
     `Downloaded files always animate.` +
     `</p>` +
-    `<dialog class="wallpaper-guidance-dialog" data-role="wallpaper-guidance-dialog"` +
-    ` aria-labelledby="wallpaper-guidance-title">` +
-    `<div class="wallpaper-guidance-heading">` +
-    `<h2 id="wallpaper-guidance-title">How to apply this wallpaper</h2>` +
-    `<button type="button" data-action="close-wallpaper-guidance">Close</button>` +
-    `</div>` +
-    `<p><strong>Android</strong> — set the exported MP4 as a live wallpaper through a ` +
-    `live-wallpaper app on your device. No conversion is needed.</p>` +
-    `<p><strong>iOS</strong> — iOS does not accept MP4 as a wallpaper. Convert the file to a ` +
-    `Live Photo — a paired JPEG and MOV with a matching Content Identifier — using a ` +
-    `separate app, then apply it.</p>` +
-    `</dialog>` +
     `</section>` +
     `</div>`;
 
@@ -213,20 +173,6 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
   const downloadButton = root.querySelector<HTMLButtonElement>('[data-action="download-svg"]');
   const playbackButton = root.querySelector<HTMLButtonElement>('[data-action="toggle-playback"]');
   const notice = root.querySelector<HTMLElement>('[data-role="reduced-motion-notice"]');
-  const wallpaperButton = root.querySelector<HTMLButtonElement>('[data-action="download-wallpaper"]');
-  const wallpaperPresetSelect = root.querySelector<HTMLSelectElement>('[data-role="wallpaper-preset"]');
-  const wallpaperStatus = root.querySelector<HTMLElement>('[data-role="wallpaper-status"]');
-  const wallpaperProgress = root.querySelector<HTMLElement>('[data-role="wallpaper-progress"]');
-  const wallpaperProgressLabel = root.querySelector<HTMLElement>(
-    '[data-role="wallpaper-progress-label"]',
-  );
-  const wallpaperProgressFill = root.querySelector<HTMLElement>('.wallpaper-progress-fill');
-  const wallpaperGuidanceButton = root.querySelector<HTMLButtonElement>(
-    '[data-action="show-wallpaper-guidance"]',
-  );
-  const wallpaperGuidanceDialog = root.querySelector<HTMLDialogElement>(
-    '[data-role="wallpaper-guidance-dialog"]',
-  );
 
   if (
     !form ||
@@ -234,14 +180,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     !errorList ||
     !downloadButton ||
     !playbackButton ||
-    !notice ||
-    !wallpaperButton ||
-    !wallpaperPresetSelect ||
-    !wallpaperStatus ||
-    !wallpaperProgress ||
-    !wallpaperProgressLabel ||
-    !wallpaperGuidanceButton ||
-    !wallpaperGuidanceDialog
+    !notice
   ) {
     throw new Error('Application shell failed to mount its own markup.');
   }
@@ -1289,138 +1228,6 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     if (svg !== null && seed !== null) {
       downloadSvg(svg, seed);
     }
-  });
-
-  /** The preset the wallpaper export encodes at, from the actions select. */
-  function selectedWallpaperPreset(): WallpaperPreset {
-    return wallpaperPreset(wallpaperPresetSelect!.value as WallpaperPreset['id']);
-  }
-
-  /** Show (or clear) the wallpaper status message (WAL-008). */
-  function showWallpaperStatus(message: string | null): void {
-    wallpaperStatus!.textContent = message;
-    wallpaperStatus!.hidden = message === null;
-  }
-
-  /**
-   * Advance the wallpaper progress indication (WAL-007). Progress is exposed
-   * through `role="progressbar"` with a numeric `aria-valuenow` and a human
-   * `aria-valuetext`, plus a visible text percentage — never through colour or
-   * an icon alone (UI-008). The decorative track fill is `aria-hidden`.
-   */
-  function renderWallpaperProgress(rendered: number, total: number): void {
-    const percent = total <= 0 ? 0 : Math.round((rendered / total) * 100);
-
-    wallpaperProgress!.hidden = false;
-    wallpaperProgress!.setAttribute('aria-valuemax', String(total));
-    wallpaperProgress!.setAttribute('aria-valuenow', String(rendered));
-    wallpaperProgress!.setAttribute(
-      'aria-valuetext',
-      `Rendering frame ${rendered} of ${total}`,
-    );
-
-    if (wallpaperProgressLabel !== null) {
-      wallpaperProgressLabel.textContent = `Rendering… ${percent}%`;
-    }
-
-    if (wallpaperProgressFill !== null) {
-      wallpaperProgressFill.style.width = `${percent}%`;
-    }
-  }
-
-  /** Retire the progress indication once an export settles (WAL-007). */
-  function hideWallpaperProgress(): void {
-    wallpaperProgress!.hidden = true;
-    wallpaperProgress!.setAttribute('aria-valuenow', '0');
-    wallpaperProgress!.removeAttribute('aria-valuetext');
-
-    if (wallpaperProgressLabel !== null) {
-      wallpaperProgressLabel.textContent = 'Rendering… 0%';
-    }
-
-    if (wallpaperProgressFill !== null) {
-      wallpaperProgressFill.style.width = '0%';
-    }
-  }
-
-  /** True while a wallpaper export is in flight (single-render guard). */
-  let wallpaperExporting = false;
-
-  // Wallpaper export (WAL-001, WAL-002, WAL-006, WAL-008): reads the STORED
-  // scene string and encodes it offscreen — it never calls the generator and
-  // never touches the preview or the SVG download.
-  wallpaperButton!.addEventListener('click', async () => {
-    if (wallpaperExporting) {
-      return;
-    }
-
-    const { seed, svg } = store.getState();
-
-    if (svg === null || seed === null) {
-      return;
-    }
-
-    // WAL-008: probe the encoder BEFORE starting. An unsupported browser gets
-    // an explicit message and keeps its SVG download fully functional.
-    if (!wallpaperEncodingAvailable()) {
-      showWallpaperStatus(
-        'Video wallpaper export is not available in this browser. You can still download the SVG.',
-      );
-      return;
-    }
-
-    const preset = selectedWallpaperPreset();
-    // Test seam (task 4.2): the interaction suite bounds the frame budget so
-    // the encode + download path completes without a multi-minute render.
-    const frames = window.__WALLPAPER_FRAME_COUNT__ ?? WALLPAPER_FRAME_COUNT;
-
-    wallpaperExporting = true;
-    wallpaperButton!.disabled = true;
-    showWallpaperStatus(null);
-    renderWallpaperProgress(0, frames);
-
-    try {
-      const blob = await encodeWallpaper(svg, preset, {
-        frames,
-        onProgress: (rendered, total) => renderWallpaperProgress(rendered, total),
-      });
-      downloadWallpaperBlob(blob, wallpaperFilename(seed, preset));
-    } catch (error) {
-      // Distinguish an unavailable encoder (WAL-008) from a mid-render failure:
-      // the former is a browser capability, the latter a transient error.
-      showWallpaperStatus(
-        error instanceof WallpaperUnavailableError
-          ? 'Video wallpaper export is not available in this browser. You can still download the SVG.'
-          : 'Video wallpaper export failed.',
-      );
-    } finally {
-      hideWallpaperProgress();
-      wallpaperExporting = false;
-      wallpaperButton!.disabled = false;
-    }
-  });
-
-  // Wallpaper application guidance (WAL-009): a native dialog reachable from
-  // the export action. Out-of-flow, so it contributes nothing to the density
-  // budget; closed via its button or the native Esc.
-  wallpaperGuidanceButton.addEventListener('click', () => {
-    if (!wallpaperGuidanceDialog.open) {
-      wallpaperGuidanceDialog.showModal();
-    }
-  });
-
-  wallpaperGuidanceDialog.addEventListener('click', (event) => {
-    if (event.target === wallpaperGuidanceDialog) {
-      wallpaperGuidanceDialog.close();
-    }
-  });
-
-  const closeWallpaperGuidance = root.querySelector<HTMLButtonElement>(
-    '[data-action="close-wallpaper-guidance"]',
-  );
-
-  closeWallpaperGuidance?.addEventListener('click', () => {
-    wallpaperGuidanceDialog.close();
   });
 
   playbackButton.addEventListener('click', () => {

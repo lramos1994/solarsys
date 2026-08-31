@@ -778,6 +778,15 @@ test.describe('generator-owned values (CTL-009)', () => {
 });
 
 test.describe('SVG download (EXP-001, EXP-002)', () => {
+  test('only exposes SVG as a downloadable format', async ({ page }) => {
+    await expect(page.locator('[data-action="download-svg"]')).toBeVisible();
+    await expect(page.locator('[data-action="download-wallpaper"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="wallpaper-preset"]')).toHaveCount(0);
+    await expect(page.locator('[data-action="show-wallpaper-guidance"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="wallpaper-status"]')).toHaveCount(0);
+    await expect(page.locator('[data-role="wallpaper-progress"]')).toHaveCount(0);
+  });
+
   test('downloads the currently previewed scene repeatedly as SVG', async ({ page }) => {
     const preview = page.locator('#preview');
     const downloadButton = page.locator('[data-action="download-svg"]');
