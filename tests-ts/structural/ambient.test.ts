@@ -1,8 +1,12 @@
 import { describe, expect, it } from 'vitest';
 import { createHash } from 'node:crypto';
+import { readFileSync } from 'node:fs';
 import { parseHTML } from 'linkedom';
 import { inspectStructure } from '../helpers/structure';
 import { createIdGenerator } from '../../ts/generator/ids';
+import { DEFAULT_INPUT } from '../../ts/app/controls';
+import { validateScene } from '../../ts/app/validation';
+import { generateScene } from '../../ts/generator/scene';
 import { createPrng } from '../../ts/generator/prng';
 import { paletteByName } from '../../ts/generator/palette';
 import {
@@ -20,6 +24,13 @@ import {
  */
 
 const PALETTE = paletteByName('Aurora');
+const RETIRED_FIXTURE = JSON.parse(
+  readFileSync(new URL('../fixtures/retired-starfield-300x300-seed42.json', import.meta.url), 'utf8'),
+) as {
+  starCount: number;
+  stars: Array<{ fill: string; opacity: string; x: string; y: string; r: string }>;
+};
+const CIRCLE_STAR = /<circle data-role="star" cx="([^"]+)" cy="([^"]+)" r="([^"]+)" fill="([^"]+)" opacity="([^"]+)"\/>/g;
 
 function parse(markup: string): Document {
   const { document } = parseHTML(
@@ -36,6 +47,22 @@ function background(width = 300, height = 300, seed = 42): string {
     createIdGenerator(seed),
     createPrng(seed),
   );
+}
+
+function parseCircleStars(markup: string): Array<{
+  cx: string;
+  cy: string;
+  r: string;
+  fill: string;
+  opacity: string;
+}> {
+  return [...markup.matchAll(CIRCLE_STAR)].map((match) => ({
+    cx: match[1]!,
+    cy: match[2]!,
+    r: match[3]!,
+    fill: match[4]!,
+    opacity: match[5]!,
+  }));
 }
 
 function belt(seed = 42, config?: unknown): string {
@@ -76,7 +103,7 @@ describe('background and starfield', () => {
   it('preserves the default-canvas ambient bytes at the damping knee', () => {
     const digest = createHash('sha256').update(background(600, 600, 42)).digest('hex');
 
-    expect(digest).toBe('57a65564a6634b87ad510fbcae8d68b6adadbcba1cf6c0591a1a212a4270362a');
+    expect(digest).toBe('56011da565ee47eea1629013bc3d450942390626b43f4f6fb7c427f96caba1f7');
   });
 
   it('bounds large-canvas star count while keeping it above the default', () => {
@@ -105,12 +132,136 @@ describe('background and starfield', () => {
     expect(opacities.size).toBeGreaterThan(1);
   });
 
+  it('serializes each retired star as a direct circle with the same resolved geometry', () => {
+    const stars = parseCircleStars(background());
+
+    expect(stars).toHaveLength(RETIRED_FIXTURE.starCount);
+    expect(stars).toEqual(
+      RETIRED_FIXTURE.stars.map((star) => ({
+        cx: star.x,
+        cy: star.y,
+        r: star.r,
+        fill: star.fill,
+        opacity: star.opacity,
+      })),
+    );
+  });
+
+  it('keeps the retired opacity set readable per star', () => {
+    const current = new Set(parseCircleStars(background()).map((star) => star.opacity));
+    const retired = new Set(RETIRED_FIXTURE.stars.map((star) => star.opacity));
+
+    expect(current.size).toBeGreaterThan(1);
+    expect([...current].sort()).toEqual([...retired].sort());
+  });
+
+  it('preserves the retired background PRNG draw count', () => {
+    const base = createPrng(42);
+    let draws = 0;
+
+    renderBackground(
+      { width: 300, height: 300 },
+      PALETTE,
+      createIdGenerator(42),
+      {
+        next() {
+          draws += 1;
+          return base.next();
+        },
+      },
+    );
+
+    expect(draws).toBe(6248);
+  });
+
+  it('removes the retired unit-circle symbol while preserving the downstream id sequence', () => {
+    const report = inspectStructure(`<svg xmlns="http://www.w3.org/2000/svg">${background()}</svg>`);
+
+    expect(report.violations).toEqual([]);
+    expect(report.ids).not.toContain('star-16-0');
+    expect(report.ids.slice(0, 5)).toEqual([
+      'star-glow-16-1',
+      'vignette-16-2',
+      'nebula-16-3',
+      'nebula-16-4',
+      'nebula-16-5',
+    ]);
+  });
+
   it('produces a structurally sound fragment', () => {
     const report = inspectStructure(
       `<svg xmlns="http://www.w3.org/2000/svg">${background()}</svg>`,
     );
 
     expect(report.violations).toEqual([]);
+  });
+
+  // GEN-028: no element may represent more than one star. The rejected merged
+  // forms are the ones this catches — they collapse thousands of stars into a
+  // handful of shared paths, which is measurably NOT rendering-equivalent
+  // (SF-011/SF-012: max channel delta 53-77 against a ceiling of 16) and is
+  // larger under compression (SF-014/SF-015: +1.65% and +1.98% gzip).
+  it('represents every star with its own element rather than shared geometry', () => {
+    const markup = background();
+    const document = parse(markup);
+    const starElements = [...document.querySelectorAll('[data-role="star"]')];
+
+    expect(starElements.length).toBeGreaterThan(0);
+    expect(parseCircleStars(markup)).toHaveLength(starElements.length);
+
+    for (const element of starElements) {
+      expect(element.tagName.toLowerCase()).toBe('circle');
+      expect(element.getAttribute('cx')).not.toBeNull();
+      expect(element.getAttribute('cy')).not.toBeNull();
+      expect(element.getAttribute('r')).not.toBeNull();
+      expect(element.getAttribute('fill')).not.toBeNull();
+      expect(element.getAttribute('opacity')).not.toBeNull();
+    }
+  });
+});
+
+// GEN-027: the raw serialized size is the one genuinely user-visible gain,
+// because the download path writes the string uncompressed (SF-017/SF-D10).
+// The gzip figure is RECORDED but deliberately NOT asserted as an improvement:
+// it moved only -1.36% and presenting it as a benefit is the claim SF-D4
+// forbids.
+describe('serialized scene size (GEN-027)', () => {
+  function scene(size: number): string {
+    const validated = validateScene({
+      ...DEFAULT_INPUT,
+      canvasWidth: String(size),
+      canvasHeight: String(size),
+    });
+
+    if (!validated.ok) {
+      throw new Error(`default scene failed validation: ${JSON.stringify(validated.errors)}`);
+    }
+
+    return generateScene(validated.params, validated.seed);
+  }
+
+  it('cuts the 1500x1500 raw byte count at least 20% below the SF-001 baseline', () => {
+    const markup = scene(1500);
+    const raw = Buffer.byteLength(markup);
+    const stars = (markup.match(/data-role="star"/g) ?? []).length;
+
+    // Mechanism guard: an empty or starless document would trivially satisfy a
+    // byte ceiling, so prove the scene is the one that was measured first.
+    expect(stars).toBe(7_000);
+    expect(
+      raw,
+      `1500x1500 raw bytes ${raw}, baseline 945260, reduction ${(((945_260 - raw) / 945_260) * 100).toFixed(2)}%`,
+    ).toBeLessThanOrEqual(945_260 * 0.8);
+  });
+
+  it('keeps the 7,000 rendered-star cap while shrinking the default canvas output', () => {
+    const markup = scene(600);
+    const raw = Buffer.byteLength(markup);
+    const stars = (markup.match(/data-role="star"/g) ?? []).length;
+
+    expect(stars).toBe(6_139);
+    expect(stars).toBeLessThanOrEqual(7_000);
+    expect(raw, `600x600 raw bytes ${raw}, baseline 784790`).toBeLessThan(784_790);
   });
 });
 

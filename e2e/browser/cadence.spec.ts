@@ -146,6 +146,10 @@ async function measureCadence(page: Page): Promise<{
   fps: number;
   nodes: number;
   stars: number;
+  p50: number;
+  p95: number;
+  worst: number;
+  framesOver25ms: number;
 }> {
   return page.evaluate(async (duration) => {
     const svg = document.querySelector('#preview svg');
@@ -163,12 +167,21 @@ async function measureCadence(page: Page): Promise<{
 
     const startedAt = performance.now();
     let frames = 0;
+    // GEN-028: a cadence claim about the starfield must report the frame-gap
+    // DISTRIBUTION, never an average fps figure alone. An average is exactly
+    // what hid a real defect in the belt work, and it is what made a 96%
+    // node reduction look like a win here when p95 moved 0.9ms (SF-010, SF-D3).
+    let previous = startedAt;
+    const gaps: number[] = [];
 
     await new Promise<void>((resolve) => {
       const frame = () => {
+        const now = performance.now();
         frames += 1;
+        gaps.push(now - previous);
+        previous = now;
 
-        if (performance.now() - startedAt >= duration) {
+        if (now - startedAt >= duration) {
           resolve();
         } else {
           requestAnimationFrame(frame);
@@ -178,12 +191,32 @@ async function measureCadence(page: Page): Promise<{
       requestAnimationFrame(frame);
     });
 
+    const sorted = [...gaps].sort((a, b) => a - b);
+    const quantile = (q: number): number =>
+      sorted.length === 0 ? 0 : sorted[Math.min(sorted.length - 1, Math.floor(sorted.length * q))]!;
+
     return {
       fps: (frames * 1_000) / (performance.now() - startedAt),
       nodes,
       stars,
+      p50: quantile(0.5),
+      p95: quantile(0.95),
+      worst: sorted.length === 0 ? 0 : sorted[sorted.length - 1]!,
+      framesOver25ms: gaps.filter((gap) => gap > 25).length,
     };
   }, SAMPLE_DURATION_MS);
+}
+
+/** GEN-028 distribution line. Never report fps without it for the starfield. */
+function cadenceLine(
+  label: string,
+  cadence: { fps: number; nodes: number; stars: number; p50: number; p95: number; worst: number; framesOver25ms: number },
+): string {
+  return (
+    `${label} rendered ${cadence.nodes} nodes / ${cadence.stars} stars at ` +
+    `${cadence.fps.toFixed(1)}fps — p50 ${cadence.p50.toFixed(1)}ms, p95 ${cadence.p95.toFixed(1)}ms, ` +
+    `worst ${cadence.worst.toFixed(1)}ms, ${cadence.framesOver25ms} frames over 25ms`
+  );
 }
 
 test.describe('preview animation cadence (GEN-016)', () => {
@@ -197,7 +230,7 @@ test.describe('preview animation cadence (GEN-016)', () => {
     const defaultCadence = await measureCadence(page);
     expect(
       defaultCadence.fps,
-      `600px preview rendered ${defaultCadence.nodes} nodes / ${defaultCadence.stars} stars at ${defaultCadence.fps.toFixed(1)}fps`,
+      cadenceLine('600px preview', defaultCadence),
     ).toBeGreaterThanOrEqual(MINIMUM_FPS);
 
     await setValue(page.locator('[data-control="canvasWidth"]'), String(MAXIMUM_CANVAS));
@@ -205,9 +238,18 @@ test.describe('preview animation cadence (GEN-016)', () => {
     await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1505 1505/);
 
     const maximumCadence = await measureCadence(page);
+
+    // GEN-028: record the distribution, not just the verdict, so a future
+    // starfield node-count proposal starts from measured p50/p95/worst/over-25ms
+    // figures instead of an average fps number.
+    testInfo.annotations.push({
+      type: 'cadence distribution',
+      description: `${cadenceLine('600px preview', defaultCadence)}; ${cadenceLine('1500px preview', maximumCadence)}`,
+    });
+
     expect(
       maximumCadence.fps,
-      `1500px preview rendered ${maximumCadence.nodes} nodes / ${maximumCadence.stars} stars at ${maximumCadence.fps.toFixed(1)}fps`,
+      cadenceLine('1500px preview', maximumCadence),
     ).toBeGreaterThanOrEqual(MINIMUM_FPS);
     expect(maximumCadence.stars).toBeLessThanOrEqual(7_000);
     expect(maximumCadence.stars).toBeGreaterThan(defaultCadence.stars);

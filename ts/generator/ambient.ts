@@ -79,14 +79,15 @@ export function renderBackground(
   const background = palette.background;
   const vignetteColor = background[3];
 
-  const starSymbolId = ids.next('star');
+  // Preserve the retired star-symbol draw so every downstream id remains
+  // byte-identical even though stars no longer reference the unit circle.
+  ids.next('star');
   const glowId = ids.next('star-glow');
   const vignetteId = ids.next('vignette');
   const nebulaIds = NEBULA_SPOTS.map(() => ids.next('nebula'));
 
   let defs =
     `<defs>` +
-    `<circle id="${starSymbolId}" cx="0" cy="0" r="1"/>` +
     `<radialGradient id="${glowId}">` +
     `<stop offset="0%" stop-color="#ffffff" stop-opacity="0.18"/>` +
     `<stop offset="100%" stop-color="#ffffff" stop-opacity="0"/>` +
@@ -141,8 +142,8 @@ export function renderBackground(
       const color = palette.stars[randomInt(random, 0, palette.stars.length - 1)]!;
 
       out +=
-        `<use data-role="star" href="#${starSymbolId}" fill="${color}"` +
-        ` opacity="${tier.opacity}" transform="translate(${x} ${y}) scale(${scale})"/>`;
+        `<circle data-role="star" cx="${x}" cy="${y}" r="${scale}" fill="${color}"` +
+        ` opacity="${tier.opacity}"/>`;
     }
   }
 
@@ -155,8 +156,7 @@ export function renderBackground(
     out +=
       `<circle data-role="star-glow" cx="${x}" cy="${y}"` +
       ` r="${randomInt(random, 15, 30) / 10}" fill="url(#${glowId})"/>` +
-      `<use data-role="star" href="#${starSymbolId}" fill="#ffffff"` +
-      ` opacity="1" transform="translate(${x} ${y}) scale(0.6)"/>`;
+      `<circle data-role="star" cx="${x}" cy="${y}" r="0.6" fill="#ffffff" opacity="1"/>`;
   }
 
   out += `<rect data-role="vignette" width="${width}" height="${height}" fill="url(#${vignetteId})"/>`;
