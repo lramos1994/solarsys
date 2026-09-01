@@ -1,6 +1,11 @@
 import { expect, test, type Page } from '@playwright/test';
 import { generateScene, type SceneParams } from '../../ts/generator/scene';
 
+type Point = { x: number; y: number };
+
+const MOTION_TIMEOUT_MS = 1500;
+const MOTION_INTERVALS_MS = [120, 180, 240, 320];
+
 /**
  * Task 3.2 (QLT-006, EXP-003): the REAL generated scene animates unaided.
  *
@@ -30,7 +35,29 @@ function dataUrl(svg: string): string {
   return `data:image/svg+xml;base64,${Buffer.from(svg).toString('base64')}`;
 }
 
-async function planetPosition(page: Page): Promise<{ x: number; y: number }> {
+async function waitForInlineScene(page: Page): Promise<void> {
+  await expect(page.locator('svg.solarsys')).toBeVisible();
+  await expect
+    .poll(async () => (await page.locator('g[data-role="planet"]').first().boundingBox())?.width ?? 0)
+    .toBeGreaterThan(0);
+}
+
+async function waitForImageScene(page: Page): Promise<void> {
+  const scene = page.locator('#scene');
+
+  await expect(scene).toBeVisible();
+  await expect
+    .poll(async () =>
+      scene.evaluate((node) => {
+        const image = node as HTMLImageElement;
+
+        return image.complete && image.naturalWidth > 0 && image.naturalHeight > 0;
+      }),
+    )
+    .toBe(true);
+}
+
+async function planetPosition(page: Page): Promise<Point> {
   const box = await page.locator('g[data-role="planet"]').first().boundingBox();
 
   if (box === null) {
@@ -40,12 +67,34 @@ async function planetPosition(page: Page): Promise<{ x: number; y: number }> {
   return { x: box.x, y: box.y };
 }
 
+async function observedPlanetDisplacement(page: Page): Promise<number> {
+  const first = await planetPosition(page);
+  let furthest = 0;
+
+  await expect
+    .poll(
+      async () => {
+        const current = await planetPosition(page);
+        furthest = Math.max(furthest, Math.hypot(current.x - first.x, current.y - first.y));
+        return furthest;
+      },
+      {
+        intervals: MOTION_INTERVALS_MS,
+        timeout: MOTION_TIMEOUT_MS,
+        message: 'rendered planet never moved within the bounded polling window',
+      },
+    )
+    .toBeGreaterThan(1);
+
+  return furthest;
+}
+
 test.describe('generated scene animates standalone', () => {
   test.beforeEach(async ({ page }) => {
     await page.setContent(
       `<!doctype html><html><body style="margin:0">${SCENE}</body></html>`,
     );
-    await page.waitForTimeout(100);
+    await waitForInlineScene(page);
   });
 
   test('renders in the engine', async ({ page }) => {
@@ -54,11 +103,7 @@ test.describe('generated scene animates standalone', () => {
   });
 
   test('moves its planets along their orbits', async ({ page }, testInfo) => {
-    const first = await planetPosition(page);
-    await page.waitForTimeout(700);
-    const second = await planetPosition(page);
-
-    const distance = Math.hypot(second.x - first.x, second.y - first.y);
+    const distance = await observedPlanetDisplacement(page);
 
     testInfo.annotations.push({
       type: 'planet displacement',
@@ -82,13 +127,24 @@ test.describe('generated scene animates embedded via img src', () => {
         `<img id="scene" src="${dataUrl(DEBUG_SCENE)}" width="300" height="300">` +
         `</body></html>`,
     );
-    await page.waitForTimeout(150);
+    await waitForImageScene(page);
 
     const first = await page.locator('#scene').screenshot();
-    await page.waitForTimeout(700);
-    const second = await page.locator('#scene').screenshot();
+    let identical = true;
 
-    const identical = Buffer.compare(first, second) === 0;
+    await expect
+      .poll(
+        async () => {
+          identical = Buffer.compare(first, await page.locator('#scene').screenshot()) === 0;
+          return identical;
+        },
+        {
+          intervals: MOTION_INTERVALS_MS,
+          timeout: MOTION_TIMEOUT_MS,
+          message: 'embedded scene pixels never changed within the bounded polling window',
+        },
+      )
+      .toBe(false);
 
     testInfo.annotations.push({
       type: 'img animation',

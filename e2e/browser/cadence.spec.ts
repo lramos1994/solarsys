@@ -8,6 +8,12 @@ import { BELT_RENDER_CAP } from '../../ts/app/validation';
 const MINIMUM_FPS = 50;
 const BELT_TYPES = ['rocky', 'icy', 'metallic'] as const;
 
+// Cadence is the measured user-visible signal, so the two performance-budget
+// checks in this file must not compete with each other for the same runner CPU.
+// Playwright's fullyParallel mode otherwise schedules them concurrently within
+// the file, which perturbs the exact FPS budget this spec is asserting.
+test.describe.configure({ mode: 'serial' });
+
 type BeltType = (typeof BELT_TYPES)[number];
 
 type RgbChannels = [number, number, number];

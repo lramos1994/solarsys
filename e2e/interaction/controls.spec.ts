@@ -13,6 +13,10 @@ async function viewBox(page: Page): Promise<string> {
   return (await page.locator('#preview svg').getAttribute('viewBox')) ?? '';
 }
 
+async function previewTimelineSeconds(page: Page): Promise<number> {
+  return page.locator('#preview svg').evaluate((node) => (node as SVGSVGElement).getCurrentTime());
+}
+
 async function orbitPathData(page: Page, index: number): Promise<string> {
   return (
     (await page.locator('#preview [data-role="orbit"]').nth(index).getAttribute('d')) ?? ''
@@ -606,10 +610,19 @@ test.describe('active orbit emphasis (CX-016, UI-009)', () => {
       });
 
     const before = await centre();
-    await page.waitForTimeout(700);
-    const after = await centre();
-
-    expect(Math.hypot(after.x - before.x, after.y - before.y)).toBeGreaterThan(2);
+    await expect
+      .poll(
+        async () => {
+          const after = await centre();
+          return Math.hypot(after.x - before.x, after.y - before.y);
+        },
+        {
+          intervals: [120, 180, 240, 320],
+          timeout: 1_500,
+          message: 'active-planet highlight never moved within the bounded polling window',
+        },
+      )
+      .toBeGreaterThan(2);
   });
 
   test('a moon-bearing planet shows its moon orbit (CX-018)', async ({ page }) => {
@@ -883,13 +896,15 @@ test.describe('invalid input (CTL-007)', () => {
     // Position is the wrong probe — an orbit is a closed loop, so the planet
     // periodically returns to any chosen reference point. The SVG timeline is
     // measured instead, which is monotonic and unambiguous.
-    const elapsed = () =>
-      page.locator('#preview svg').evaluate((node) =>
-        (node as SVGSVGElement).getCurrentTime(),
-      );
+    await expect
+      .poll(() => previewTimelineSeconds(page), {
+        intervals: [120, 180, 240, 320],
+        timeout: 2_500,
+        message: 'preview timeline never advanced far enough to prove the rejection check is meaningful',
+      })
+      .toBeGreaterThan(1);
 
-    await page.waitForTimeout(2_000);
-    const before = await elapsed();
+    const before = await previewTimelineSeconds(page);
 
     // Control: a frozen or absent timeline would make the check below vacuous.
     expect(before).toBeGreaterThan(1);
@@ -898,7 +913,7 @@ test.describe('invalid input (CTL-007)', () => {
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
 
     // A rewritten preview starts a fresh timeline at zero.
-    expect(await elapsed()).toBeGreaterThanOrEqual(before);
+    expect(await previewTimelineSeconds(page)).toBeGreaterThanOrEqual(before);
   });
 
   test('names the control and its range', async ({ page }) => {

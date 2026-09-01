@@ -124,15 +124,22 @@ describe('scene store', () => {
     const store = createSceneStore();
 
     store.submit(VALID);
+    const initialState = store.getState();
+    const storedSvg = initialState.svg;
     const count = store.getGenerationCount();
 
     // Preview and download consume the same stored string (D-19, EXP-002):
     // reading the state must never call the generator again, even though a
     // regeneration would be byte-identical and therefore invisible to a
     // byte comparison.
-    expect(store.getState().svg).toBe(store.getState().svg);
-    store.getState();
-    store.getState();
+    expect(count).toBe(1);
+    expect(storedSvg).toContain('<svg');
+
+    const firstRead = store.getState();
+    const secondRead = store.getState();
+
+    expect(firstRead.svg).toBe(storedSvg);
+    expect(secondRead.svg).toBe(storedSvg);
 
     expect(store.getGenerationCount()).toBe(count);
   });
@@ -141,12 +148,17 @@ describe('scene store', () => {
     const store = createSceneStore();
 
     store.submit(VALID);
+    const beforeState = store.getState();
+    const beforeSvg = beforeState.svg;
     const count = store.getGenerationCount();
 
     store.submit({ ...VALID, canvasWidth: 'abc' });
     store.submit({ ...VALID, canvasWidth: '999999' });
 
-    expect(store.getState().svg).not.toBeNull();
+    expect(count).toBe(1);
+    expect(beforeSvg).toContain('<svg');
+    expect(store.getState().svg).toBe(beforeSvg);
+    expect(store.getState().errors.length).toBeGreaterThan(0);
     expect(store.getGenerationCount()).toBe(count);
   });
 });

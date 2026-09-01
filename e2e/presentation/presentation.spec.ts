@@ -54,41 +54,41 @@ function contrastRatio(foreground: string, background: string): number {
   return (high + 0.05) / (low + 0.05);
 }
 
-/** Effective text color and the first opaque ancestor background. */
+/** Effective text color and a directly-selected contractual background. */
 async function textAndBackground(
   page: Page,
-  selector: string,
+  selectors: { text: string; background: string },
 ): Promise<{ text: string; background: string }> {
-  return page.evaluate((sel) => {
-    const element = sel.startsWith('text=')
+  return page.evaluate(({ text: textSelector, background: backgroundSelector }) => {
+    const query = (selector: string): HTMLElement | null => selector.startsWith('text=')
       ? [...document.querySelectorAll<HTMLElement>('body *')].find(
-          (node) => node.textContent?.trim() === sel.slice(5),
+          (node) => node.textContent?.trim() === selector.slice(5),
         ) ?? null
-      : document.querySelector<HTMLElement>(sel);
+      : document.querySelector<HTMLElement>(selector);
 
-    if (element === null) {
-      throw new Error(`missing element: ${sel}`);
+    const textElement = query(textSelector);
+    const backgroundElement = query(backgroundSelector);
+
+    if (textElement === null) {
+      throw new Error(`missing text element: ${textSelector}`);
     }
 
-    const text = getComputedStyle(element).color;
-
-    let node: HTMLElement | null = element;
-    let background = '';
-
-    while (node !== null) {
-      const candidate = getComputedStyle(node).backgroundColor;
-
-      if (candidate !== 'transparent' && candidate !== 'rgba(0, 0, 0, 0)') {
-        background = candidate;
-
-        break;
-      }
-
-      node = node.parentElement;
+    if (backgroundElement === null) {
+      throw new Error(`missing background element: ${backgroundSelector}`);
     }
 
-    return { text, background };
-  }, selector);
+    return {
+      text: getComputedStyle(textElement).color,
+      background: getComputedStyle(backgroundElement).backgroundColor,
+    };
+  }, selectors);
+}
+
+async function labelSelectorForControl(page: Page, control: string): Promise<string> {
+  const id = await page.locator(`[data-control="${control}"]`).first().getAttribute('id');
+
+  expect(id, `${control} needs an id for label association`).toBeTruthy();
+  return `label[for="${id}"]`;
 }
 
 /** The element that currently owns keyboard focus, described by its hooks. */
@@ -698,6 +698,31 @@ test.describe('labels (CX-007)', () => {
       await expect(page.locator(`label[for="${id}"]`)).toHaveCount(1);
     }
   });
+
+  test('detects when the canvas width label contract is absent', async ({ page }) => {
+    const control = page.locator('[data-control="canvasWidth"]').first();
+    const id = await control.getAttribute('id');
+
+    expect(id).toBeTruthy();
+
+    const labelSelector = `label[for="${id}"]`;
+    await expect(page.locator(labelSelector)).toHaveCount(1);
+    await expect(page.getByText('Canvas width', { exact: true })).toHaveCount(1);
+
+    await page.evaluate((controlId) => {
+      const label = document.querySelector<HTMLLabelElement>(`label[for="${controlId}"]`);
+
+      if (label === null) {
+        throw new Error(`missing label for ${controlId}`);
+      }
+
+      label.setAttribute('for', `${controlId}-broken`);
+    }, id!);
+
+    await expect(page.locator(labelSelector)).toHaveCount(0);
+    await expect(control).toHaveCount(1);
+    await expect(page.getByText('Canvas width', { exact: true })).toHaveCount(1);
+  });
 });
 
 test.describe('contrast (UI-006)', () => {
@@ -708,17 +733,26 @@ test.describe('contrast (UI-006)', () => {
 
   test('primary text meets WCAG AA contrast', async ({ page }) => {
     const cases = [
-      '[data-control="canvasWidth"]', // input text
-      'label[for="canvas-width"]', // label text
-      '[data-action="download-svg"]', // button text
+      {
+        text: '[data-control="canvasWidth"]',
+        background: '[data-control="canvasWidth"]',
+      },
+      {
+        text: await labelSelectorForControl(page, 'canvasWidth'),
+        background: '[data-role="instrument-controls"]',
+      },
+      {
+        text: '[data-action="download-svg"]',
+        background: '[data-action="download-svg"]',
+      },
     ];
 
-    for (const selector of cases) {
-      const { text, background } = await textAndBackground(page, selector);
+    for (const selectors of cases) {
+      const { text, background } = await textAndBackground(page, selectors);
 
       expect(
         contrastRatio(text, background),
-        `${selector} contrast ${contrastRatio(text, background).toFixed(2)}:1 is below 4.5:1`,
+        `${selectors.text} contrast ${contrastRatio(text, background).toFixed(2)}:1 is below 4.5:1`,
       ).toBeGreaterThanOrEqual(4.5);
     }
   });
@@ -726,7 +760,10 @@ test.describe('contrast (UI-006)', () => {
   test('muted helper text remains discernible', async ({ page }) => {
     const { text, background } = await textAndBackground(
       page,
-      'text=Calibrate the system, then observe the generated artefact.',
+      {
+        text: 'text=Calibrate the system, then observe the generated artefact.',
+        background: '[data-role="instrument-controls"]',
+      },
     );
 
     expect(contrastRatio(text, background)).toBeGreaterThanOrEqual(3);
