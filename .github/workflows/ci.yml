@@ -1,9 +1,14 @@
 name: CI
 
-# PR-only: branch protection already requires this check to pass (with the
-# branch up to date) before merging, so re-running the same bytes on the
-# post-merge push would be redundant. Pushes to main only trigger the light
-# Pages deploy.
+# PR-only: branch protection requires this check green (with the branch up to
+# date) before merging, so a post-merge push re-run would test identical bytes.
+# Pushes to main only trigger the light Pages deploy.
+#
+# Scope: typecheck + the headless Vitest layers (geometry, determinism,
+# structural — no browser). The Playwright matrix (browser, interaction,
+# density, reduced-motion, presentation) is deliberately NOT run here: it is
+# calibrated for a developer machine and is flaky-slow on shared runners.
+# Run `npm run test:all` locally before opening a PR.
 on:
   pull_request:
 
@@ -13,9 +18,9 @@ concurrency:
 
 jobs:
   verify:
-    name: Typecheck, headless and browser matrix
+    name: Typecheck and headless tests
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 15
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -32,8 +37,5 @@ jobs:
       - name: Typecheck
         run: npm run typecheck
 
-      - name: Install Playwright browsers
-        run: npx playwright install --with-deps chromium firefox webkit
-
-      - name: Test (headless + browser + interaction + density + reduced-motion + presentation)
-        run: npm run test:all
+      - name: Test (headless layers)
+        run: npm run test
