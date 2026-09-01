@@ -14,9 +14,9 @@ type ReviewState = (typeof STATES)[number];
 const BELT_TYPES = ['rocky', 'icy', 'metallic'] as const;
 const RING_TYPES = ['Thin', 'Banded', 'Wide'] as const;
 const RING_LAYER_COUNTS = {
-  Thin: 3,
-  Banded: 3,
-  Wide: 4,
+  Thin: 4,
+  Banded: 5,
+  Wide: 5,
 } as const;
 
 type BeltType = (typeof BELT_TYPES)[number];
@@ -289,10 +289,12 @@ async function ringLayeringEvidence(page: Page, expectedType: RingType): Promise
     const order = Array.from(bodyGroup.children).map((node) =>
       node.getAttribute('data-role') ?? node.tagName,
     );
-    const backLayers = back.querySelectorAll('ellipse').length;
-    const frontLayers = front.querySelectorAll('path').length;
-    const expectedLayers =
-      type === 'Wide' ? 4 : 3;
+    // A particulate layer is serialized as a path on both ring halves, while
+    // the ordinary back layers are ellipses. Count the shared semantic hook,
+    // not element names that differ by rendering half.
+    const backLayers = back.querySelectorAll('[data-role="ring-layer"]').length;
+    const frontLayers = front.querySelectorAll('[data-role="ring-layer"]').length;
+    const expectedLayers = type === 'Thin' ? 4 : 5;
     const bodyBox = rect(body);
     const backBox = rect(back);
     const frontBox = rect(front);
