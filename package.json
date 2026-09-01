@@ -27,7 +27,7 @@
     "url": "git+https://github.com/lramos1994/solarsys.git"
   },
   "author": "lucas ramos <lucas_ramos1994@hotmail.com>",
-  "license": "ISC",
+  "license": "MIT",
   "bugs": {
     "url": "https://github.com/lramos1994/solarsys/issues"
   },

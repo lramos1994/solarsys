@@ -916,7 +916,7 @@ test.describe('planet dialog presentation (UI-012)', () => {
             const trimmed = selector.trim();
 
             // The only permitted chrome selectors into #preview are the
-            // container itself and the root SVG sizing rule (CLAUDE.md
+            // container itself and the root SVG sizing rule (docs/ARCHITECTURE.md
             // invariant); anything that names a generated descendant
             // restyles the scene.
             if (!trimmed.includes('#preview')) {

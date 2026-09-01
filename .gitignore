@@ -4,3 +4,13 @@ e2e/.artifacts/
 
 # kanban worker worktrees
 .worktrees/
+
+# private engineering-process artifacts (kept local only)
+openspec/
+.hermes/
+.claude/
+.superpowers/
+CLAUDE.md
+docs/agents/
+docs/superpowers/
+docs/SOLARSYS-TYPESCRIPT-MIGRATION-HANDOFF.md
