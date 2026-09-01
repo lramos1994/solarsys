@@ -41,6 +41,12 @@ npm run preview    # serve the production build
 `npm run build` emits plain static assets. Serving `build/` from any static host
 is sufficient; nothing else is required.
 
+## Live application
+
+The application is deployed at
+**https://lramos1994.github.io/solarsys/** — every push to `main` rebuilds and
+republishes it via GitHub Pages (`.github/workflows/deploy.yml`).
+
 ## Using the application
 
 The interface exposes every user-owned parameter:

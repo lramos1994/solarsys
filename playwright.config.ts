@@ -24,6 +24,9 @@ export default defineConfig({
     command: 'npm run build && npm run preview -- --port 4173 --strictPort',
     url: 'http://127.0.0.1:4173/',
     reuseExistingServer: !process.env.CI,
+    // The command includes a full tsc + vite build, which exceeds the 60s
+    // default on shared CI runners (observed on GitHub-hosted ubuntu-latest).
+    timeout: 240_000,
   },
   use: {
     baseURL: 'http://127.0.0.1:4173/',

@@ -107,7 +107,11 @@ describe('determinism sweep', () => {
 });
 
 describe('integrity sweep', () => {
-  it('keeps every generated scene well-formed', () => {
+  // The XML well-formedness pass over every (params, seed) combination is CPU
+  // bound and routinely exceeds the default 5s budget on shared CI runners
+  // (observed twice on GitHub-hosted ubuntu-latest); the generous budget only
+  // bounds a hang, it never masks a failure.
+  it('keeps every generated scene well-formed', { timeout: 60_000 }, () => {
     for (const params of CASES) {
       for (const seed of SEEDS) {
         const report = inspectStructure(generateScene(params, seed));
