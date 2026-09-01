@@ -1,8 +1,10 @@
 name: CI
 
+# PR-only: branch protection already requires this check to pass (with the
+# branch up to date) before merging, so re-running the same bytes on the
+# post-merge push would be redundant. Pushes to main only trigger the light
+# Pages deploy.
 on:
-  push:
-    branches: [main]
   pull_request:
 
 concurrency:
