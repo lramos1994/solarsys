@@ -463,8 +463,8 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
 
   test('bounded scalar inputs are type=number with native min/max/step', async ({ page }) => {
     const expected = {
-      canvasWidth: { min: '100', max: '1500' },
-      canvasHeight: { min: '100', max: '1500' },
+      canvasWidth: { min: '1000', max: '2500' },
+      canvasHeight: { min: '1000', max: '2500' },
       // CTL-015: orbital distance is a percentage of the scene radius,
       // 0..120; the slider reads it from the same shared BOUNDS.
       planetDistance: { min: '0', max: '120' },
@@ -527,8 +527,8 @@ test.describe('numeric widgets (CX-001, CX-002)', () => {
     const message = await page.locator('[data-role="errors"] li').first().textContent();
 
     expect(message).toContain('Canvas width');
-    expect(message).toContain('100');
-    expect(message).toContain('1500');
+    expect(message).toContain('1000');
+    expect(message).toContain('2500');
   });
 });
 
@@ -576,7 +576,7 @@ test.describe('inline errors (CX-004, CX-005)', () => {
 
     const message = await page.locator(`#${describedBy}`).textContent();
     expect(message).toContain('Canvas width');
-    expect(message).toContain('100');
+    expect(message).toContain('1000');
   });
 
   test('reports every invalid field inline at once', async ({ page }) => {
@@ -621,7 +621,7 @@ test.describe('inline errors (CX-004, CX-005)', () => {
     await control.blur();
     await expect(control).toHaveAttribute('aria-invalid', 'true');
 
-    await control.fill('500');
+    await control.fill('1200');
     await control.blur();
 
     await expect(page.locator('#controls [aria-invalid="true"]')).toHaveCount(0);

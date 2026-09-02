@@ -1,7 +1,7 @@
 import { expect, test, type Page } from '@playwright/test';
 
-const DEFAULT_CANVAS = 600;
-const MAXIMUM_CANVAS = 1500;
+const DEFAULT_CANVAS = 1000;
+const MAXIMUM_CANVAS = 2500;
 const SAMPLE_DURATION_MS = 2_000;
 import { BELT_RENDER_CAP } from '../../ts/app/validation';
 
@@ -236,12 +236,12 @@ test.describe('preview animation cadence (GEN-016)', () => {
     const defaultCadence = await measureCadence(page);
     expect(
       defaultCadence.fps,
-      cadenceLine('600px preview', defaultCadence),
+      cadenceLine(`${DEFAULT_CANVAS}px preview`, defaultCadence),
     ).toBeGreaterThanOrEqual(MINIMUM_FPS);
 
     await setValue(page.locator('[data-control="canvasWidth"]'), String(MAXIMUM_CANVAS));
     await setValue(page.locator('[data-control="canvasHeight"]'), String(MAXIMUM_CANVAS));
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1505 1505/);
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /2505 2505/);
 
     const maximumCadence = await measureCadence(page);
 
@@ -250,29 +250,29 @@ test.describe('preview animation cadence (GEN-016)', () => {
     // figures instead of an average fps number.
     testInfo.annotations.push({
       type: 'cadence distribution',
-      description: `${cadenceLine('600px preview', defaultCadence)}; ${cadenceLine('1500px preview', maximumCadence)}`,
+      description: `${cadenceLine(`${DEFAULT_CANVAS}px preview`, defaultCadence)}; ${cadenceLine(`${MAXIMUM_CANVAS}px preview`, maximumCadence)}`,
     });
 
     expect(
       maximumCadence.fps,
-      cadenceLine('1500px preview', maximumCadence),
+      cadenceLine(`${MAXIMUM_CANVAS}px preview`, maximumCadence),
     ).toBeGreaterThanOrEqual(MINIMUM_FPS);
-    expect(maximumCadence.stars).toBeLessThanOrEqual(7_000);
+    expect(maximumCadence.stars).toBeLessThanOrEqual(20_000);
     expect(maximumCadence.stars).toBeGreaterThan(defaultCadence.stars);
   });
 });
 
 test.describe('configurable asteroid belt cadence (GEN-018)', () => {
-  test('keeps a maximum configured belt at 1500px animatable', async ({ page }, testInfo) => {
+  test('keeps a maximum configured belt at the maximum canvas animatable', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'chromium', 'Cadence budget is established in Chromium.');
 
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto('/');
     await expect(page.locator('#preview svg')).toBeVisible();
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), '1500');
-    await setValue(page.locator('[data-control="canvasHeight"]'), '1500');
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1505 1505/);
+    await setValue(page.locator('[data-control="canvasWidth"]'), String(MAXIMUM_CANVAS));
+    await setValue(page.locator('[data-control="canvasHeight"]'), String(MAXIMUM_CANVAS));
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /2505 2505/);
 
     await page.locator('[data-role="asteroid-belt-group"] .belt-chevron').click();
     const beltSelect = page.locator('[data-role="asteroid-belt-group"] [data-control="beltType"]');
@@ -288,7 +288,7 @@ test.describe('configurable asteroid belt cadence (GEN-018)', () => {
       const evidence = await requireDenseBeltDetail(page);
 
       expect(evidence.selectedType).toBe(type);
-      // The authored count is a DENSITY (GEN-024): at 1500x1500 it resolves to
+      // The authored count is a DENSITY (GEN-024): at the maximum canvas it resolves to
       // an area-compensated effective count, so it is deliberately not 500.
       expect(evidence.asteroidCount).toBeGreaterThan(500);
       expect(evidence.clusterCount).toBeGreaterThan(0);
@@ -347,7 +347,7 @@ test.describe('configurable asteroid belt cadence (GEN-018)', () => {
 
     expect(
       cadence.fps,
-      `1500px preview with ${asteroids} asteroids rendered ${cadence.nodes} nodes at ${cadence.fps.toFixed(1)}fps`,
+      `${MAXIMUM_CANVAS}px preview with ${asteroids} asteroids rendered ${cadence.nodes} nodes at ${cadence.fps.toFixed(1)}fps`,
     ).toBeGreaterThanOrEqual(MINIMUM_FPS);
     expect(beltEvidenceByType).toHaveLength(BELT_TYPES.length);
   });

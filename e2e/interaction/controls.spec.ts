@@ -133,17 +133,17 @@ test.describe('canvas dimensions', () => {
   test('changing the width regenerates the preview', async ({ page }) => {
     const before = await viewBox(page);
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '1640');
 
     await expect(page.locator('#preview svg')).not.toHaveAttribute('viewBox', before);
     // The shell adds a 5-unit margin to the canvas (CANVAS_MARGIN).
-    expect(await viewBox(page)).toContain('645');
+    expect(await viewBox(page)).toContain('1645');
   });
 
   test('changing the height regenerates the preview', async ({ page }) => {
-    await setValue(page.locator('[data-control="canvasHeight"]'), '480');
+    await setValue(page.locator('[data-control="canvasHeight"]'), '1480');
 
-    expect(await viewBox(page)).toContain('485');
+    expect(await viewBox(page)).toContain('1485');
   });
 });
 
@@ -156,8 +156,8 @@ test.describe('planet size', () => {
     await setValue(dialog.locator('[data-control="planetSize"]'), '20');
 
     await expect(radius).not.toHaveAttribute('r', before ?? '');
-    // 20% of the 300-unit scene radius on the default 600x600 canvas.
-    expect(Number(await radius.getAttribute('r'))).toBe(60);
+    // 20% of the 500-unit scene radius on the default 1000x1000 canvas.
+    expect(Number(await radius.getAttribute('r'))).toBe(100);
   });
 });
 
@@ -217,10 +217,10 @@ test.describe('orbital distance forms (CTL-002)', () => {
     const width = Math.max(...xs) - Math.min(...xs);
     const height = Math.max(...ys) - Math.min(...ys);
 
-    // 67% and 20% of the 300-unit scene radius: 402 wide against 120 tall.
+    // 67% and 20% of the 500-unit scene radius: 670 wide against 200 tall.
     // The asymmetry must survive into the path.
-    expect(width).toBeCloseTo(402, 6);
-    expect(height).toBeCloseTo(120, 6);
+    expect(width).toBeCloseTo(670, 6);
+    expect(height).toBeCloseTo(200, 6);
   });
 
   test('switching between the two forms updates the same orbit', async ({ page }) => {
@@ -336,7 +336,7 @@ test.describe('moon configuration (CTL-004)', () => {
     const dialog = await openPlanetDialog(page, 1);
     const renderedPlanet = page.locator('#preview [data-role="planet"]').nth(1);
 
-    // Planet 2's default size is 6% of the 300-unit scene radius: an 18-unit
+    // Planet 2's default size is 6% of the 500-unit scene radius: a 30-unit
     // radius. Moon values are percentages OF THAT.
     await setValue(dialog.locator('[data-control="moonSize"]'), '50');
     await setValue(dialog.locator('[data-control="moonDistance"]'), '200');
@@ -344,9 +344,9 @@ test.describe('moon configuration (CTL-004)', () => {
 
     await expect(
       renderedPlanet.locator(':scope > [data-role="moon"] [data-role="moon-body"]'),
-    ).toHaveAttribute('r', '9');
+    ).toHaveAttribute('r', '15');
     await expect(renderedPlanet.locator(':scope > [data-role="moon-orbit"]'))
-      .toHaveAttribute('d', /^M -36 0/);
+      .toHaveAttribute('d', /^M -60 0/);
     await expect(renderedPlanet.locator(':scope > [data-role="moon"] > animateMotion'))
       .toHaveAttribute('dur', '30s');
   });
@@ -412,10 +412,12 @@ test.describe('asteroid belt configuration (CTL-011)', () => {
   test('opens enabled with the default configuration', async ({ page }) => {
     await expect(page.locator('[data-control="beltEnabled"]')).toBeChecked();
     await expect(page.locator('[data-control="asteroidCount"]')).toHaveValue('130');
-    expect(await bakedRockCount(page)).toBe(130);
+    // The authored count is a density against the retired 600px reference
+    // (GEN-024): at the 1000x1000 default it resolves to round(130 * 5/3) = 217.
+    expect(await bakedRockCount(page)).toBe(217);
     await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveAttribute(
       'data-count',
-      '130',
+      '217',
     );
   });
 
@@ -431,11 +433,12 @@ test.describe('asteroid belt configuration (CTL-011)', () => {
 
     await setValue(page.locator('[data-control="asteroidCount"]'), '40');
 
+    // 40 authored -> round(40 * 5/3) = 67 rendered at the 1000px default.
     await expect(page.locator('#preview [data-role="asteroid-belt"]')).toHaveAttribute(
       'data-count',
-      '40',
+      '67',
     );
-    expect(await bakedRockCount(page)).toBe(40);
+    expect(await bakedRockCount(page)).toBe(67);
   });
 
   test('the retired inner/outer radius controls are gone', async ({ page }) => {
@@ -728,11 +731,11 @@ test.describe('palette selection (CTL-005, CX-011)', () => {
     await expect(selected).toHaveValue('Ember');
     await expect(description).toContainText('Ember');
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '1640');
 
     await expect(selected).toHaveValue('Ember');
     await expect(description).toContainText('Ember');
-    expect(await viewBox(page)).toContain('645');
+    expect(await viewBox(page)).toContain('1645');
   });
 });
 
@@ -869,8 +872,8 @@ test.describe('static client-side operation (QLT-008)', () => {
     const requests: string[] = [];
     page.on('request', (request) => requests.push(request.url()));
 
-    await setValue(page.locator('[data-control="canvasWidth"]'), '640');
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
+    await setValue(page.locator('[data-control="canvasWidth"]'), '1640');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1645/);
 
     const download = page.waitForEvent('download');
     await page.locator('[data-action="download-svg"]').click();
@@ -922,8 +925,8 @@ test.describe('invalid input (CTL-007)', () => {
     const message = await page.locator('[data-role="errors"] li').first().textContent();
 
     expect(message).toContain('Canvas width');
-    expect(message).toContain('100');
-    expect(message).toContain('1500');
+    expect(message).toContain('1000');
+    expect(message).toContain('2500');
   });
 
   test('recovers once the value is valid again', async ({ page }) => {
@@ -932,8 +935,8 @@ test.describe('invalid input (CTL-007)', () => {
     await setValue(control, '5');
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(1);
 
-    await setValue(control, '500');
+    await setValue(control, '1200');
     await expect(page.locator('[data-role="errors"] li')).toHaveCount(0);
-    expect(await viewBox(page)).toContain('505');
+    expect(await viewBox(page)).toContain('1205');
   });
 });

@@ -30,7 +30,12 @@ const CANVAS_SIZE = 1500;
 const SAMPLE_SIZE = 900;
 const ENGINE_LIMITS = {
   chromium: { proportion: 0.0005, maxDelta: 16 },
-  firefox: { proportion: 0.01, maxDelta: 16 },
+  // Recalibrated for the GEN-029 star budget (7,000 -> 15,267 at this scene):
+  // the changed-pixel proportion scales with star count (measured 0.654% ->
+  // 1.4254%, linear within 2%), while the channel delta — the arm that detects
+  // a different-drawing regression — stayed at 11. The delta ceiling is the
+  // contract that must never widen; the proportion ceiling tracks the budget.
+  firefox: { proportion: 0.02, maxDelta: 16 },
   webkit: { proportion: 0.0005, maxDelta: 16 },
 } as const;
 const NORMALIZED_STAR_SYMBOL_ID = 'star-equivalence-probe';
@@ -68,6 +73,38 @@ function sampleScene(size = CANVAS_SIZE): string {
   }
 
   return generateScene(validated.params, validated.seed);
+}
+
+/**
+ * Strip every SMIL element so both rasterizations sample the SAME frame.
+ *
+ * The contract compares the starfield's STATIC discs, and Decision 3 fixes
+ * the sample at frame 0. Loading each variant in its own `<img>` does NOT
+ * guarantee that: WebKit advances the SMIL timeline between the two loads, and
+ * at the GEN-029 star budget the longer decode makes the drift deterministic —
+ * measured as a false channel delta of 181-185 from the moving belt and
+ * comets, collapsing to 9 with the timeline frozen while Chromium and Firefox
+ * figures did not move. Removing the animation elements from BOTH sides pins
+ * every arm to the identical base frame; the guard below proves the strip
+ * actually removed something so a future serialization change cannot turn
+ * this into a silent no-op.
+ */
+function freezeTimeline(svg: string): string {
+  const frozen = svg
+    .replace(/<animateTransform[^>]*\/>/g, '')
+    .replace(/<animateMotion[^>]*(?:\/>|>[\s\S]*?<\/animateMotion>)/g, '')
+    .replace(/<animate[^>]*\/>/g, '')
+    .replace(/<mpath[^>]*\/>/g, '');
+
+  if (frozen === svg) {
+    throw new Error('freezeTimeline removed no animation elements: harness no longer measures a frozen frame');
+  }
+
+  if (/<animate|<mpath/.test(frozen)) {
+    throw new Error('freezeTimeline left animation elements behind');
+  }
+
+  return frozen;
 }
 
 /** Parses the shipped circle-per-star form into resolved geometry. */
@@ -224,7 +261,7 @@ async function rasterDiff(
   );
 }
 
-const SOURCE = sampleScene();
+const SOURCE = freezeTimeline(sampleScene());
 const ADOPTED = adopted(SOURCE);
 const RETIRED = retired(SOURCE);
 const MERGED = merged(SOURCE);

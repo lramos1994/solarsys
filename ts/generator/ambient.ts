@@ -33,8 +33,19 @@ const STAR_TIERS = [
 /** The default 600px canvas plus the generator's five-unit ambient margin. */
 const STAR_DAMPING_REFERENCE_AREA = 605 * 605;
 
-/** Total rendered stars, including the four-to-seven bright foreground stars. */
-const MAX_RENDERED_STARS = 7_000;
+/**
+ * Total rendered stars, including the four-to-seven bright foreground stars.
+ *
+ * MEASURED (GEN-029): with the sqrt-of-area damped curve unchanged, 20,000
+ * stars hold the display's full frame cadence in Chromium at 2000px and 2500px
+ * through the production UI path (p95 <= 17.3ms, worst 30.1ms, at most 2
+ * frames over 25ms in a 2.5s sample). The curve's own uncapped value at 2500px
+ * (25,411) already degrades the tail (p95 20.3ms, worst 36.5ms), and full
+ * area-proportional density (105,217 stars) collapses to a ~66ms median frame
+ * gap. Do not raise this cap without repeating that frame-gap-distribution
+ * sweep at the maximum permitted canvas.
+ */
+const MAX_RENDERED_STARS = 20_000;
 
 const STAR_DENSITY = STAR_TIERS.reduce((total, tier) => total + 1 / tier.divisor, 0);
 

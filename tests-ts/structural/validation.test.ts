@@ -19,8 +19,8 @@ import {
 
 function input(overrides: Partial<RawSceneInput> = {}): RawSceneInput {
   return {
-    canvasWidth: '300',
-    canvasHeight: '300',
+    canvasWidth: '1000',
+    canvasHeight: '1000',
     seed: '42',
     palette: 'Aurora',
     planets: [{ size: '10', distance: '120', moon: false }],
@@ -184,8 +184,8 @@ describe('parameter bounds (task 1.7 acceptance evidence)', () => {
   it('records the ergonomics bounds', () => {
     // Canvas stays absolute; the geometric parameters are percentages of a
     // stated reference length (CTL-015).
-    expect(BOUNDS.canvasWidth).toEqual({ min: 100, max: 1_500 });
-    expect(BOUNDS.canvasHeight).toEqual({ min: 100, max: 1_500 });
+    expect(BOUNDS.canvasWidth).toEqual({ min: 1_000, max: 2_500 });
+    expect(BOUNDS.canvasHeight).toEqual({ min: 1_000, max: 2_500 });
     expect(BOUNDS.planetSize).toEqual({ min: 1, max: 25, step: 0.5 });
     expect(BOUNDS.orbitDistance).toEqual({ min: 0, max: 120 });
     expect(BOUNDS.moonSize).toEqual({ min: 10, max: 60 });
@@ -376,14 +376,14 @@ describe('orbit bound (CTL-015, retiring CTL-013)', () => {
   it('resolves an authored percentage against the drawable half-extent', () => {
     const result = validateScene(
       input({
-        canvasWidth: '600',
-        canvasHeight: '600',
+        canvasWidth: '1200',
+        canvasHeight: '1200',
         planets: [{ size: '10', distance: '50', moon: false }],
       }),
     );
 
-    // 50% of min(600, 600) / 2 = 150 absolute units reaching the generator.
-    expect(result.ok && result.params.planets[0]?.distance).toBe(150);
+    // 50% of min(1200, 1200) / 2 = 300 absolute units reaching the generator.
+    expect(result.ok && result.params.planets[0]?.distance).toBe(300);
   });
 });
 
@@ -511,7 +511,7 @@ describe('rejection semantics', () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      expect(result.params.canvas).toEqual({ width: 300, height: 300 });
+      expect(result.params.canvas).toEqual({ width: 1000, height: 1000 });
       expect(result.params.planets).toHaveLength(1);
       expect(result.seed).toBe(42);
     }
@@ -525,8 +525,8 @@ describe('rejection semantics', () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      // Percentages of the 300x300 canvas's 150-unit half-extent.
-      expect(result.params.planets[0]?.distance).toEqual([150, 60, 120, 30]);
+      // Percentages of the 1000x1000 canvas's 500-unit half-extent.
+      expect(result.params.planets[0]?.distance).toEqual([500, 200, 400, 100]);
     }
   });
 
@@ -553,8 +553,8 @@ describe('rejection semantics', () => {
     expect(result.ok).toBe(true);
 
     if (result.ok) {
-      // Percentages of the 300x300 canvas's 150-unit half-extent.
-      expect(result.params.planets[0]?.distance).toEqual([150, 60, 120, 30]);
+      // Percentages of the 1000x1000 canvas's 500-unit half-extent.
+      expect(result.params.planets[0]?.distance).toEqual([500, 200, 400, 100]);
     }
   });
 

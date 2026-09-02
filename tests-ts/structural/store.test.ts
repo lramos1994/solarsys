@@ -10,8 +10,8 @@ import { createSceneStore } from '../../ts/app/store';
  */
 
 const VALID = {
-  canvasWidth: '300',
-  canvasHeight: '300',
+  canvasWidth: '1000',
+  canvasHeight: '1000',
   seed: '42',
   palette: 'Aurora',
   planets: [{ size: '10', distance: '120', moon: false as const }],
@@ -80,7 +80,7 @@ describe('scene store', () => {
     const store = createSceneStore();
 
     store.submit(VALID);
-    store.submit({ ...VALID, canvasHeight: '400' });
+    store.submit({ ...VALID, canvasHeight: '1400' });
 
     expect(store.getState().seed).toBe(42);
   });
@@ -116,7 +116,7 @@ describe('scene store', () => {
     store.submit(VALID);
     expect(store.getGenerationCount()).toBe(1);
 
-    store.submit({ ...VALID, canvasHeight: '400' });
+    store.submit({ ...VALID, canvasHeight: '1400' });
     expect(store.getGenerationCount()).toBe(2);
   });
 

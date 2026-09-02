@@ -28,8 +28,8 @@ export interface Bound {
 
 /** Both endpoints are accepted and source every matching native widget. */
 export const BOUNDS = {
-  canvasWidth: { min: 100, max: 1_500 },
-  canvasHeight: { min: 100, max: 1_500 },
+  canvasWidth: { min: 1_000, max: 2_500 },
+  canvasHeight: { min: 1_000, max: 2_500 },
   planetSize: { min: 1, max: 25, step: 0.5 },
   orbitDistance: { min: 0, max: 120 },
   orbitLeft: { min: 0, max: 120 },

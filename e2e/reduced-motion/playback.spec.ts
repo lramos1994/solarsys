@@ -94,10 +94,10 @@ test.describe('playback control', () => {
     await page.locator('[data-action="toggle-playback"]').click();
 
     const width = page.locator('[data-control="canvasWidth"]');
-    await width.fill('640');
+    await width.fill('1640');
     await width.blur();
 
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1645/);
     expect(await observedDisplacement(page), 'the regenerated scene resumed on its own').toBeLessThan(1);
   });
 
@@ -123,7 +123,7 @@ test.describe('playback control', () => {
     // 20% of the 300-unit scene radius on the default 600x600 canvas.
     await size.fill('20');
     await size.blur();
-    await expect(page.locator('#preview [data-role="planet-body"]').first()).toHaveAttribute('r', '60');
+    await expect(page.locator('#preview [data-role="planet-body"]').first()).toHaveAttribute('r', '100');
 
     const [planetBox, orbitBox] = await Promise.all([planet.boundingBox(), orbit.boundingBox()]);
 
@@ -229,10 +229,10 @@ test.describe('hovering an editable control pauses the preview (QLT-010)', () =>
     await page.locator('[data-control="canvasWidth"]').hover();
 
     const width = page.locator('[data-control="canvasWidth"]');
-    await width.fill('640');
+    await width.fill('1640');
     await width.blur();
 
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /645/);
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1645/);
     expect(
       await observedDisplacement(page),
       'regenerated scene resumed under the hovering pointer',

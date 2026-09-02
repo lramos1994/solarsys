@@ -36,8 +36,8 @@ function scene(input: RawSceneInput): string {
 
 function input(overrides: Partial<RawSceneInput> = {}): RawSceneInput {
   return {
-    canvasWidth: '600',
-    canvasHeight: '600',
+    canvasWidth: '1000',
+    canvasHeight: '1000',
     seed: String(SEED),
     palette: 'Aurora',
     planets: [{ size: '6', distance: { mode: 'scalar', value: '50' }, moon: false }],
@@ -94,7 +94,7 @@ function moonRadius(svg: string): number {
 describe('CTL-014 orbital distance is proportional to the canvas', () => {
   it('reaches the same fraction of the drawable half-extent at every canvas size', () => {
     const authored = '80';
-    const ratios = [100, 300, 600, 900, 1500].map((size) => {
+    const ratios = [1000, 1200, 1500, 2000, 2500].map((size) => {
       const svg = scene(
         input({
           canvasWidth: String(size),
@@ -140,25 +140,25 @@ describe('CTL-014 orbital distance is proportional to the canvas', () => {
       }),
     );
 
-    expect(orbitExtent(svg, 600)).toBeCloseTo(halfExtent(600, 600) * 1.2, 6);
+    expect(orbitExtent(svg, 1000)).toBeCloseTo(halfExtent(1000, 1000) * 1.2, 6);
   });
 
   it('uses the smaller dimension as the reference on a non-square canvas', () => {
     const svg = scene(
       input({
-        canvasWidth: '1200',
-        canvasHeight: '400',
+        canvasWidth: '2400',
+        canvasHeight: '1000',
         planets: [{ size: '6', distance: { mode: 'scalar', value: '100' }, moon: false }],
       }),
     );
 
-    expect(orbitExtent(svg, 1200)).toBeCloseTo(halfExtent(1200, 400), 6);
+    expect(orbitExtent(svg, 2400)).toBeCloseTo(halfExtent(2400, 1000), 6);
   });
 });
 
 describe('CTL-014 planet size is proportional to the canvas', () => {
   it('keeps the same fraction of the drawable half-extent at every canvas size', () => {
-    for (const size of [100, 600, 1500]) {
+    for (const size of [1000, 1500, 2500]) {
       const svg = scene(
         input({
           canvasWidth: String(size),
@@ -172,7 +172,7 @@ describe('CTL-014 planet size is proportional to the canvas', () => {
   });
 
   it('caps the maximum planet diameter at half the smaller canvas dimension', () => {
-    for (const size of [100, 300, 600, 900, 1500]) {
+    for (const size of [1000, 1200, 1500, 2000, 2500]) {
       const svg = scene(
         input({
           canvasWidth: String(size),
@@ -200,7 +200,7 @@ describe('CTL-014 a moon is measured against the planet it orbits', () => {
   });
 
   it('orbits outside its planet at the minimum distance, for every planet size', () => {
-    for (const canvas of [100, 600, 1500]) {
+    for (const canvas of [1000, 1500, 2500]) {
       for (const planet of [BOUNDS.planetSize.min, 10, BOUNDS.planetSize.max]) {
         const svg = scene(
           input({
@@ -244,8 +244,10 @@ describe('CTL-014 a moon is measured against the planet it orbits', () => {
   });
 
   it('does not round a resolved value to a whole unit', () => {
-    // At the smallest canvas the smallest planet has radius 0.5; rounding the
-    // resolved moon distance to an integer would put the moon ON the planet.
+    // The rounding hazard was pinned at the retired 100px canvas, where the
+    // smallest planet resolved to radius 0.5. The invariant survives the new
+    // 1000px floor: resolution stays unrounded and the minimum moon distance
+    // (120% of the planet radius) must still clear the planet's surface.
     const size = BOUNDS.canvasWidth.min;
     const svg = scene(
       input({
@@ -261,7 +263,9 @@ describe('CTL-014 a moon is measured against the planet it orbits', () => {
       }),
     );
 
-    expect(planetRadius(svg)).toBeCloseTo(0.5, 6);
+    // 1% of the 500-unit half-extent.
+    expect(planetRadius(svg)).toBeCloseTo(5, 6);
+    expect(moonOrbitRadius(svg)).toBeCloseTo(planetRadius(svg) * 1.2, 6);
     expect(moonOrbitRadius(svg)).toBeGreaterThan(planetRadius(svg));
   });
 });
@@ -289,8 +293,8 @@ describe('CTL-014 resizing the canvas rescales the composition', () => {
       };
     };
 
-    const small = measure(300);
-    const large = measure(1500);
+    const small = measure(1000);
+    const large = measure(2500);
 
     expect(large.orbit).toBeCloseTo(small.orbit, 6);
     expect(large.planet).toBeCloseTo(small.planet, 6);
@@ -299,14 +303,21 @@ describe('CTL-014 resizing the canvas rescales the composition', () => {
 });
 
 describe('CTL-016 defaults reproduce the previously shipped composition', () => {
-  /** The absolute default composition at 600x600 before the units changed. */
+  /**
+   * The absolute default composition at 600x600 before the units changed.
+   * The 600px canvas is below the new 1000px floor, so the comparison scales
+   * the shipped values to the 1000px default by the half-extent ratio
+   * (500/300): the authored percentages are unchanged, so the composition is
+   * the same frame, rescaled.
+   */
   const SHIPPED = [
     { size: 12, distance: 110 },
     { size: 18, distance: 190 },
     { size: 9, distance: 260 },
   ];
+  const SCALE = 500 / 300;
 
-  it('resolves each default within one unit of the shipped value', () => {
+  it('resolves each default within one scaled unit of the shipped value', () => {
     const proportional = [
       { size: '4', distance: '37' },
       { size: '6', distance: '63' },
@@ -326,10 +337,14 @@ describe('CTL-016 defaults reproduce the previously shipped composition', () => 
         }),
       );
 
-      expect(Math.abs(planetRadius(svg) - SHIPPED[index]!.size)).toBeLessThanOrEqual(1);
+      // The 1e-9 slack absorbs float error in the scaled comparison; the
+      // contract is still "within one shipped unit, rescaled".
       expect(
-        Math.abs(orbitExtent(svg, 600) - SHIPPED[index]!.distance),
-      ).toBeLessThanOrEqual(1);
+        Math.abs(planetRadius(svg) - SHIPPED[index]!.size * SCALE),
+      ).toBeLessThanOrEqual(1 * SCALE + 1e-9);
+      expect(
+        Math.abs(orbitExtent(svg, 1000) - SHIPPED[index]!.distance * SCALE),
+      ).toBeLessThanOrEqual(1 * SCALE + 1e-9);
     });
   });
 });
