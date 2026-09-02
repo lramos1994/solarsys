@@ -107,10 +107,13 @@ describe('determinism sweep', () => {
 });
 
 describe('integrity sweep', () => {
-  // The XML well-formedness pass over every (params, seed) combination is CPU
-  // bound and routinely exceeds the default 5s budget on shared CI runners
-  // (observed twice on GitHub-hosted ubuntu-latest); the generous budget only
-  // bounds a hang, it never masks a failure.
+  // Every test in this block runs the same CPU-bound `inspectStructure` pass
+  // over every (params, seed) combination, so they all need the same budget.
+  // The well-formedness case was given one first, after it exceeded the
+  // default 5s twice on GitHub-hosted ubuntu-latest; its siblings were left on
+  // the default and one of them (identifier uniqueness) then failed at 5201ms
+  // on the same runner class while taking ~2.4s locally. The generous budget
+  // only bounds a hang — it never masks a failure.
   it('keeps every generated scene well-formed', { timeout: 60_000 }, () => {
     for (const params of CASES) {
       for (const seed of SEEDS) {
@@ -127,7 +130,7 @@ describe('integrity sweep', () => {
     }
   });
 
-  it('keeps every identifier unique across the sweep', () => {
+  it('keeps every identifier unique across the sweep', { timeout: 60_000 }, () => {
     for (const params of CASES) {
       for (const seed of SEEDS) {
         const report = inspectStructure(generateScene(params, seed));
@@ -143,7 +146,7 @@ describe('integrity sweep', () => {
     }
   });
 
-  it('resolves every internal reference across the sweep', () => {
+  it('resolves every internal reference across the sweep', { timeout: 60_000 }, () => {
     for (const params of CASES) {
       for (const seed of SEEDS) {
         const report = inspectStructure(generateScene(params, seed));
