@@ -86,7 +86,7 @@ test.describe('debounced regeneration (CX-017)', () => {
 
     // The settled value applied to the preview.
     const body = page.locator('#preview [data-role="planet-body"]').first();
-    // 24% of the 300-unit scene radius on the default 600x600 canvas.
-    await expect(body).toHaveAttribute('r', '72');
+    // 24% of the 500-unit scene radius on the default 1000x1000 canvas.
+    await expect(body).toHaveAttribute('r', '120');
   });
 });

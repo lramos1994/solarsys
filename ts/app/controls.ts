@@ -75,8 +75,8 @@ export const DEFAULT_BELT: RawAsteroidBeltConfig = {
 };
 
 export const DEFAULT_INPUT: RawSceneInput = {
-  canvasWidth: '600',
-  canvasHeight: '600',
+  canvasWidth: '1000',
+  canvasHeight: '1000',
   seed: '20260826',
   palette: RANDOM_PALETTE,
   sunType: DEFAULT_SUN_SELECTION,
@@ -117,10 +117,10 @@ export interface ControlView {
 
 /** Canvas dimension presets (CX-010). UI-only: they write width and height. */
 export const CANVAS_PRESETS = [
-  { id: 'square', label: 'Square 600 x 600', width: '600', height: '600' },
-  { id: 'portrait', label: 'Portrait 600 x 900', width: '600', height: '900' },
-  { id: 'landscape', label: 'Landscape 900 x 600', width: '900', height: '600' },
-  { id: 'wide', label: 'Wide 1200 x 675', width: '1200', height: '675' },
+  { id: 'square', label: 'Square 1000 x 1000', width: '1000', height: '1000' },
+  { id: 'portrait', label: 'Portrait 1000 x 1500', width: '1000', height: '1500' },
+  { id: 'landscape', label: 'Landscape 1500 x 1000', width: '1500', height: '1000' },
+  { id: 'wide', label: 'Wide 1920 x 1080', width: '1920', height: '1080' },
 ] as const;
 
 /** Value used when the current dimensions match no preset. */

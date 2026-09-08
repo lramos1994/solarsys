@@ -3,8 +3,8 @@ import { createSvgDownload } from '../../ts/app/download';
 import { createSceneStore } from '../../ts/app/store';
 
 const VALID = {
-  canvasWidth: '300',
-  canvasHeight: '300',
+  canvasWidth: '1000',
+  canvasHeight: '1000',
   seed: '42',
   palette: 'Aurora',
   planets: [{ size: '10', distance: '120', moon: false as const }],

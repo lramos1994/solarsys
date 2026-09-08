@@ -151,9 +151,10 @@ function belt(canvas: Canvas, overrides: BeltOverrides = {}): Rock[] {
 
 describe('belt density (GEN-023, GEN-024)', () => {
   it('parses every rendered rock', () => {
-    const rocks = belt({ width: 600, height: 600 });
+    const rocks = belt({ width: 1000, height: 1000 });
 
-    expect(rocks).toHaveLength(130);
+    // 130 authored resolves to round(130 * 500/300) = 217 at the 1000px default.
+    expect(rocks).toHaveLength(217);
     expect(rocks.every((rock) => Number.isFinite(rock.radius))).toBe(true);
     expect(rocks.every((rock) => rock.scale > 0)).toBe(true);
   });
@@ -164,8 +165,8 @@ describe('belt density (GEN-023, GEN-024)', () => {
   // metrics above measure real geometry rather than returning constants. They
   // now pin the corrected behaviour.
   it('preserves annulus coverage as the canvas grows (was AB-D3: 5.8x collapse)', () => {
-    const small = coveragePercent(belt({ width: 600, height: 600 }));
-    const large = coveragePercent(belt({ width: 1500, height: 1500 }));
+    const small = coveragePercent(belt({ width: 1000, height: 1000 }));
+    const large = coveragePercent(belt({ width: 2500, height: 2500 }));
 
     // The resolution is exact — `belt-geometry.test.ts` asserts that on the
     // resolved values. What is measured HERE is rendered output, where each
@@ -179,8 +180,8 @@ describe('belt density (GEN-023, GEN-024)', () => {
   });
 
   it('grows rock presence sublinearly, not absolutely (was AB-D1)', () => {
-    const small = { width: 600, height: 600 };
-    const large = { width: 1500, height: 1500 };
+    const small = { width: 1000, height: 1000 };
+    const large = { width: 2500, height: 2500 };
 
     const smallShare = rockDiameterPercent(belt(small), small);
     const largeShare = rockDiameterPercent(belt(large), large);
@@ -192,8 +193,8 @@ describe('belt density (GEN-023, GEN-024)', () => {
   });
 
   it('keeps the band circular on a non-square canvas (was AB-D2: 394px)', () => {
-    const square = bandWidth(belt({ width: 600, height: 600 }));
-    const wide = bandWidth(belt({ width: 1500, height: 600 }));
+    const square = bandWidth(belt({ width: 1000, height: 1000 }));
+    const wide = bandWidth(belt({ width: 2500, height: 1000 }));
 
     // Centroid-estimator slack; the pinned defect was a 376px difference.
     expect(Math.abs(wide - square)).toBeLessThan(3);
@@ -201,7 +202,7 @@ describe('belt density (GEN-023, GEN-024)', () => {
 
   it('distributes radial placement by area (was AB-D7: 31.4% outer half)', () => {
     const rocks = belt(
-      { width: 600, height: 600 },
+      { width: 1000, height: 1000 },
       { count: '500', centrePercent: '55', thicknessPercent: '40' },
     );
 
@@ -212,18 +213,20 @@ describe('belt density (GEN-023, GEN-024)', () => {
   });
 
   it('gives rocks a visible size hierarchy (was AB-D8: 2.36 ratio)', () => {
-    const rocks = belt({ width: 600, height: 600 }, { count: '500' });
+    const rocks = belt({ width: 1000, height: 1000 }, { count: '500' });
 
     expect(scaleRatio(rocks)).toBeGreaterThanOrEqual(4);
   });
 
-  it('renders the authored count verbatim on the default canvas', () => {
-    expect(belt({ width: 600, height: 600 })).toHaveLength(130);
+  it('resolves the authored count as a density on the default canvas', () => {
+    // The 600px verbatim canvas is below the new 1000px floor; the canvas
+    // factor (500/300)^(2-2k) with k=0.5 gives 130 * 5/3 -> 217.
+    expect(belt({ width: 1000, height: 1000 })).toHaveLength(217);
   });
 
   it('caps the effective count', () => {
     const rocks = belt(
-      { width: 1500, height: 1500 },
+      { width: 2500, height: 2500 },
       { count: '500', centrePercent: '110', thicknessPercent: '40' },
     );
 

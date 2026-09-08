@@ -33,8 +33,19 @@ const STAR_TIERS = [
 /** The default 600px canvas plus the generator's five-unit ambient margin. */
 const STAR_DAMPING_REFERENCE_AREA = 605 * 605;
 
-/** Total rendered stars, including the four-to-seven bright foreground stars. */
-const MAX_RENDERED_STARS = 7_000;
+/**
+ * Total rendered stars, including the four-to-seven bright foreground stars.
+ *
+ * MEASURED (GEN-029): with the sqrt-of-area damped curve unchanged, 20,000
+ * stars hold the display's full frame cadence in Chromium at 2000px and 2500px
+ * through the production UI path (p95 <= 17.3ms, worst 30.1ms, at most 2
+ * frames over 25ms in a 2.5s sample). The curve's own uncapped value at 2500px
+ * (25,411) already degrades the tail (p95 20.3ms, worst 36.5ms), and full
+ * area-proportional density (105,217 stars) collapses to a ~66ms median frame
+ * gap. Do not raise this cap without repeating that frame-gap-distribution
+ * sweep at the maximum permitted canvas.
+ */
+const MAX_RENDERED_STARS = 20_000;
 
 const STAR_DENSITY = STAR_TIERS.reduce((total, tier) => total + 1 / tier.divisor, 0);
 
@@ -562,6 +573,12 @@ export function renderComets(
   random: Prng,
 ): string {
   const count = randomInt(random, 1, 3);
+  // Scale head and tail to the canvas so a comet is a legible object on a large
+  // canvas instead of a two-pixel speck. Clamped so it never dominates a small
+  // scene. Reference is the default drawable extent.
+  const scale = round(
+    Math.min(2.6, Math.max(1, Math.min(canvas.width, canvas.height) / 700)),
+  );
   let out = '';
 
   for (let index = 0; index < count; index += 1) {
@@ -574,34 +591,48 @@ export function renderComets(
 
     const duration = randomInt(random, 9, 16);
     const begin = -1 * randomInt(random, 3, 8) * (index + 1);
-    const length = randomInt(random, 26, 40);
-    const halfWidth = round(length * 0.09);
-    const headRadius = 2.2;
-    const mid = round(-length * 0.5);
+    const length = round(randomInt(random, 34, 52) * scale);
+    // Widest at the head, tapering to a point at the tail tip.
+    const halfWidth = round(length * 0.13);
+    const headRadius = round(2.4 * scale);
+    const coreRadius = round(headRadius * 0.45);
+    const comaRadius = round(headRadius * 4.2);
+    const waist = round(-length * 0.62);
 
     const cometId = ids.next('comet-body');
 
+    const accent = palette.accent;
+    const hot = tint(accent, 0.85);
+
     out +=
       `<defs>` +
+      // Tail: transparent at the far tip, brightening toward the head so the
+      // comet reads as trailing luminous gas, not a flat blade.
       `<linearGradient id="${tailId}" x1="0" y1="0" x2="1" y2="0">` +
-      `<stop offset="0%" stop-color="${rgba(palette.accent, 0)}"/>` +
-      `<stop offset="60%" stop-color="${rgba(palette.accent, 0.4)}"/>` +
-      `<stop offset="100%" stop-color="${rgba(palette.accent, 0.9)}"/>` +
+      `<stop offset="0%" stop-color="${rgba(accent, 0)}"/>` +
+      `<stop offset="45%" stop-color="${rgba(accent, 0.18)}"/>` +
+      `<stop offset="80%" stop-color="${rgba(accent, 0.5)}"/>` +
+      `<stop offset="100%" stop-color="${rgba(hot, 0.85)}"/>` +
       `</linearGradient>` +
+      // Coma: a white-hot centre bleeding into an accent-coloured halo.
       `<radialGradient id="${headId}">` +
-      `<stop offset="0%" stop-color="${rgba(tint(palette.accent, 0.4), 0.95)}"/>` +
-      `<stop offset="100%" stop-color="${rgba(tint(palette.accent, 0.4), 0)}"/>` +
+      `<stop offset="0%" stop-color="${rgba(tint(accent, 0.95), 0.95)}"/>` +
+      `<stop offset="35%" stop-color="${rgba(accent, 0.55)}"/>` +
+      `<stop offset="100%" stop-color="${rgba(accent, 0)}"/>` +
       `</radialGradient>` +
       `</defs>` +
       `<g data-role="comet">` +
       `<g id="${cometId}">` +
       `<path data-role="comet-tail"` +
-      ` d="M 0 0 Q ${mid} ${-halfWidth}, ${-length} 0 Q ${mid} ${halfWidth}, 0 0 Z"` +
+      ` d="M 0 ${-halfWidth} Q ${waist} ${round(-halfWidth * 0.35)}, ${-length} 0` +
+      ` Q ${waist} ${round(halfWidth * 0.35)}, 0 ${halfWidth} Z"` +
       ` fill="url(#${tailId})"/>` +
-      `<circle data-role="comet-glow" cx="0" cy="0" r="${round(headRadius * 3)}"` +
+      `<circle data-role="comet-glow" cx="0" cy="0" r="${comaRadius}"` +
       ` fill="url(#${headId})"/>` +
       `<circle data-role="comet-head" cx="0" cy="0" r="${headRadius}"` +
-      ` fill="${tint(palette.accent, 0.4)}"/>` +
+      ` fill="${hot}"/>` +
+      `<circle data-role="comet-core" cx="0" cy="0" r="${coreRadius}"` +
+      ` fill="#ffffff"/>` +
       `</g>` +
       `<animateMotion dur="${duration}s" begin="${begin}s" repeatCount="indefinite"` +
       ` rotate="auto" path="${path}"/>` +

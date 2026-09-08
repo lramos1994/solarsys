@@ -347,19 +347,19 @@ test.describe('paired range and exact entry (CX-001)', () => {
     const id = await numeric.getAttribute('id');
     const range = page.locator(`[data-range-for="${id}"]`);
 
-    await range.fill('800');
+    await range.fill('1800');
 
-    await expect(numeric).toHaveValue('800');
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /805/);
+    await expect(numeric).toHaveValue('1800');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1805/);
   });
 
   test('typing an exact figure moves the range', async ({ page }) => {
     const numeric = page.locator('[data-control="canvasHeight"]');
     const id = await numeric.getAttribute('id');
 
-    await setValue(numeric, '750');
+    await setValue(numeric, '1750');
 
-    await expect(page.locator(`[data-range-for="${id}"]`)).toHaveValue('750');
+    await expect(page.locator(`[data-range-for="${id}"]`)).toHaveValue('1750');
   });
 
   test('the range is operable from the keyboard', async ({ page }) => {
@@ -370,8 +370,8 @@ test.describe('paired range and exact entry (CX-001)', () => {
     await range.focus();
     await page.keyboard.press('ArrowRight');
 
-    await expect(numeric).toHaveValue('601');
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /606/);
+    await expect(numeric).toHaveValue('1001');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1006/);
   });
 
   test('an out-of-range typed value still reaches the validator', async ({ page }) => {
@@ -429,8 +429,8 @@ test.describe('paired range and exact entry (CX-001)', () => {
 
     await sizeRange.fill('40');
     await expect(size).toHaveValue('40');
-    // 40% of planet 2's 18-unit radius.
-    await expect(moonBody).toHaveAttribute('r', '7.2');
+    // 40% of planet 2's 30-unit radius (6% of the 500-unit half-extent).
+    await expect(moonBody).toHaveAttribute('r', '12');
 
     const period = dialog.locator('[data-control="moonPeriod"]');
     const periodId = await period.getAttribute('id');
@@ -448,9 +448,9 @@ test.describe('canvas dimension presets (CX-010)', () => {
   test('a preset sets both dimensions and regenerates', async ({ page }) => {
     await page.locator('[data-preset="canvas"]').selectOption('portrait');
 
-    await expect(page.locator('[data-control="canvasWidth"]')).toHaveValue('600');
-    await expect(page.locator('[data-control="canvasHeight"]')).toHaveValue('900');
-    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /605 905/);
+    await expect(page.locator('[data-control="canvasWidth"]')).toHaveValue('1000');
+    await expect(page.locator('[data-control="canvasHeight"]')).toHaveValue('1500');
+    await expect(page.locator('#preview svg')).toHaveAttribute('viewBox', /1005 1505/);
   });
 
   test('every preset is accepted by the validator', async ({ page }) => {
@@ -468,7 +468,7 @@ test.describe('canvas dimension presets (CX-010)', () => {
   });
 
   test('a manual dimension reports that no preset applies', async ({ page }) => {
-    await setValue(page.locator('[data-control="canvasWidth"]'), '733');
+    await setValue(page.locator('[data-control="canvasWidth"]'), '1733');
 
     await expect(page.locator('[data-preset="canvas"]')).toHaveValue('custom');
   });

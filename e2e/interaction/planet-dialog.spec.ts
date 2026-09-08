@@ -107,10 +107,10 @@ test.describe('planet dialog lifecycle (CX-020)', () => {
     await sizeInput.fill('20');
     await sizeInput.blur();
 
-    // 20% of the 300-unit scene radius on the default 600x600 canvas.
+    // 20% of the 500-unit scene radius on the default 1000x1000 canvas.
     await expect(sceneBody).not.toHaveAttribute('r', before ?? '');
-    await expect(sceneBody).toHaveAttribute('r', '60');
-    await expect(previewBody).toHaveAttribute('r', '60');
+    await expect(sceneBody).toHaveAttribute('r', '100');
+    await expect(previewBody).toHaveAttribute('r', '100');
   });
 
   test('a rejected edit keeps the last valid scene and associates an inline error', async ({ page }) => {

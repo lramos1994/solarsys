@@ -111,9 +111,9 @@ function sceneOf(canvas: Canvas, belt: Partial<RawBelt> | false = {}): string {
   return generateScene(result.params as SceneParams, result.seed);
 }
 
-const DEFAULT_CANVAS: Canvas = { width: 600, height: 600 };
-const MAX_CANVAS: Canvas = { width: 1500, height: 1500 };
-const WIDE_CANVAS: Canvas = { width: 1500, height: 600 };
+const DEFAULT_CANVAS: Canvas = { width: 1000, height: 1000 };
+const MAX_CANVAS: Canvas = { width: 2500, height: 2500 };
+const WIDE_CANVAS: Canvas = { width: 2500, height: 1000 };
 
 describe('belt bounds and units (CTL-018)', () => {
   it('declares the proportional belt bounds once', () => {
@@ -215,11 +215,11 @@ describe('belt bounds and units (CTL-018)', () => {
   });
 
   it('does not round a resolved belt value to whole units', () => {
-    // 0.7% of a 300 unit reference is 2.1 — a fractional length that must
-    // survive to the generator (CTL-015).
+    // 0.7% of the damped reference (sqrt(300 * 500) ≈ 387.3) is ~2.71 — a
+    // fractional length that must survive to the generator (CTL-015).
     const resolved = resolveBelt(DEFAULT_CANVAS, { sizePercent: '0.7' });
 
-    expect(resolved.baseRadius).toBeCloseTo(2.1, 6);
+    expect(resolved.baseRadius).toBeCloseTo(2.7110883, 6);
     expect(Number.isInteger(resolved.baseRadius)).toBe(false);
   });
 });
@@ -250,12 +250,15 @@ describe('proportional belt geometry (CTL-017)', () => {
       return (belt.count * belt.baseRadius ** 2) / annulus;
     };
 
-    // The ratio is exact; the only slack is integer rounding of the resolved
-    // count, which is proportionally largest where the count is smallest.
+    // The ratio's only slack is integer rounding of the resolved count. The
+    // 1000px default is no longer the exact 600px reference canvas, so its own
+    // count also rounds (216.67 -> 217) and the comparison carries that error
+    // on both sides (was exact-base toBeCloseTo(1, 6) when the default WAS the
+    // reference).
     const base = coverage(DEFAULT_CANVAS);
 
-    expect(coverage(MAX_CANVAS) / base).toBeCloseTo(1, 6);
-    expect(coverage({ width: 100, height: 100 }) / base).toBeCloseTo(1, 1);
+    expect(coverage(MAX_CANVAS) / base).toBeCloseTo(1, 2);
+    expect(coverage({ width: 1040, height: 1040 }) / base).toBeCloseTo(1, 1);
   });
 
   it('preserves annulus coverage across band thicknesses', () => {
@@ -271,8 +274,11 @@ describe('proportional belt geometry (CTL-017)', () => {
     expect(coverage('1') / coverage('6')).toBeCloseTo(1, 1);
   });
 
-  it('renders the authored count verbatim on the default canvas', () => {
-    expect(resolveBelt(DEFAULT_CANVAS).count).toBe(130);
+  it('resolves the authored count as a density against the retired 600px reference', () => {
+    // The verbatim canvas (600x600, half-extent 300) sits below the new 1000px
+    // floor, so no reachable canvas renders the count literally any more. At
+    // the 1000x1000 default the canvas factor is (500/300)^1.
+    expect(resolveBelt(DEFAULT_CANVAS).count).toBe(Math.round(130 * (500 / 300)));
   });
 
   it('shares its reference length with planet orbits', () => {

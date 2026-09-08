@@ -108,14 +108,30 @@ describe('background and starfield', () => {
 
   it('bounds large-canvas star count while keeping it above the default', () => {
     const defaultCount = parse(background(600, 600, 42)).querySelectorAll('[data-role="star"]').length;
-    const maximumCount = parse(background(1500, 1500, 42)).querySelectorAll('[data-role="star"]').length;
+    const maximumCount = parse(background(2500, 2500, 42)).querySelectorAll('[data-role="star"]').length;
 
     expect(maximumCount).toBeGreaterThan(defaultCount);
-    expect(maximumCount).toBeLessThanOrEqual(7_000);
+    expect(maximumCount).toBeLessThanOrEqual(20_000);
+  });
+
+  it('lets the damped curve run past the retired 7,000 ceiling (GEN-029)', () => {
+    // The sqrt-of-area curve is unchanged; only the cap moved. At 1500x1500
+    // the curve's own value is 15,267 — the retired cap truncated it to 7,000.
+    const count = parse(background(1500, 1500, 42)).querySelectorAll('[data-role="star"]').length;
+
+    expect(count).toBe(15_267);
+  });
+
+  it('binds the 20,000 cap at the largest canvases (GEN-029)', () => {
+    for (const size of [2000, 2500]) {
+      const count = parse(background(size, size, 42)).querySelectorAll('[data-role="star"]').length;
+
+      expect(count, `${size}px`).toBe(20_000);
+    }
   });
 
   it('never reduces the star count as permitted canvas area increases', () => {
-    const counts = [100, 300, 600, 900, 1200, 1500].map(
+    const counts = [100, 300, 600, 900, 1200, 1500, 2000, 2500].map(
       (size) => parse(background(size, size, 42)).querySelectorAll('[data-role="star"]').length,
     );
 
@@ -220,12 +236,12 @@ describe('background and starfield', () => {
   });
 });
 
-// GEN-027: the raw serialized size is the one genuinely user-visible gain,
-// because the download path writes the string uncompressed (SF-017/SF-D10).
-// The gzip figure is RECORDED but deliberately NOT asserted as an improvement:
-// it moved only -1.36% and presenting it as a benefit is the claim SF-D4
-// forbids.
-describe('serialized scene size (GEN-027)', () => {
+// GEN-027: the raw serialized size stays observable per star because the
+// download path writes the string uncompressed (SF-017/SF-D10). Under GEN-029
+// the star budget itself grew (owner-accepted cost), so the byte assertions
+// pin per-star efficiency and the mechanism guards pin the budget the curve
+// resolves — not the retired 7,000-star totals.
+describe('serialized scene size (GEN-027, GEN-029)', () => {
   function scene(size: number): string {
     const validated = validateScene({
       ...DEFAULT_INPUT,
@@ -240,28 +256,32 @@ describe('serialized scene size (GEN-027)', () => {
     return generateScene(validated.params, validated.seed);
   }
 
-  it('cuts the 1500x1500 raw byte count at least 20% below the SF-001 baseline', () => {
+  it('keeps the 1500x1500 default scene within the measured byte envelope', () => {
     const markup = scene(1500);
     const raw = Buffer.byteLength(markup);
     const stars = (markup.match(/data-role="star"/g) ?? []).length;
 
     // Mechanism guard: an empty or starless document would trivially satisfy a
     // byte ceiling, so prove the scene is the one that was measured first.
-    expect(stars).toBe(7_000);
+    // 15,267 is the unchanged curve's own value at 1500px (LC-008/LC-011).
+    expect(stars).toBe(15_267);
+    // LC-011 measured 1,385KB; the ceiling holds per-star serialization
+    // efficiency (~66 raw bytes per star of headroom over the SF-001 form)
+    // without asserting the retired 7,000-star total.
     expect(
       raw,
-      `1500x1500 raw bytes ${raw}, baseline 945260, reduction ${(((945_260 - raw) / 945_260) * 100).toFixed(2)}%`,
-    ).toBeLessThanOrEqual(945_260 * 0.8);
+      `1500x1500 raw bytes ${raw}, LC-011 measured 1418240`,
+    ).toBeLessThanOrEqual(1_500_000);
   });
 
-  it('keeps the 7,000 rendered-star cap while shrinking the default canvas output', () => {
-    const markup = scene(600);
+  it('keeps the 1000x1000 default scene below the 1500 output', () => {
+    const markup = scene(1000);
     const raw = Buffer.byteLength(markup);
     const stars = (markup.match(/data-role="star"/g) ?? []).length;
 
-    expect(stars).toBe(6_139);
-    expect(stars).toBeLessThanOrEqual(7_000);
-    expect(raw, `600x600 raw bytes ${raw}, baseline 784790`).toBeLessThan(784_790);
+    expect(stars).toBe(10_195);
+    expect(stars).toBeLessThanOrEqual(20_000);
+    expect(raw).toBeLessThan(Buffer.byteLength(scene(1500)));
   });
 });
 

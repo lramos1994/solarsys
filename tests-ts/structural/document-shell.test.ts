@@ -73,6 +73,39 @@ describe('document shell', () => {
   });
 
   /**
+   * `overflow="hidden"` is not enough for a STANDALONE file. When the SVG is
+   * the document root, the renderer scales the viewBox into a letterboxed
+   * viewport and `overflow` clips to that viewport box, not the viewBox — so
+   * geometry at negative coordinates (entering comets, an overflowing outer
+   * ring, D-07 edge clipping) paints into the letterbox margins, outside the
+   * starfield. A clipPath tied to the viewBox rectangle clips in every
+   * renderer. Reported live: opening a downloaded scene showed comets and a
+   * ring spilling onto the page background.
+   */
+  it('clips the content group to the viewBox rectangle', () => {
+    const element = root(documentShell({ width: 300, height: 300 }, ''));
+    const group = element.querySelector('g[clip-path]');
+
+    expect(group, 'the content group must carry a clip-path').not.toBeNull();
+
+    const clipRef = group!.getAttribute('clip-path');
+
+    expect(clipRef).toMatch(/^url\(#/);
+
+    const clipId = clipRef!.replace(/^url\(#/, '').replace(/\)$/, '');
+    const clip = element.querySelector(`clipPath#${clipId} rect`);
+
+    expect(clip, 'the clip-path must resolve to a rect').not.toBeNull();
+    // The rect is offset by -CONTENT_OFFSET (2.5) so, inside the group's
+    // translated user space, it lands exactly on the viewBox origin and spans
+    // the full viewBox (canvas + 5 margin).
+    expect(clip!.getAttribute('x')).toBe('-2.5');
+    expect(clip!.getAttribute('y')).toBe('-2.5');
+    expect(clip!.getAttribute('width')).toBe('305');
+    expect(clip!.getAttribute('height')).toBe('305');
+  });
+
+  /**
    * QLT-012 — Firefox renders SMIL-driven motion with visible per-frame
    * jitter unless the moving group is promoted to its own composited layer.
    * Measured on Windows 11 / Firefox: a planet moving along an `animateMotion`
