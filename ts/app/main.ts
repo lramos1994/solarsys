@@ -4,8 +4,8 @@ import {
   controlsMarkup,
   CUSTOM_PRESET,
   DEFAULT_INPUT,
-  DEFAULT_PLANET,
   presetFor,
+  randomPlanet,
   readControls,
   type RawSceneControls,
 } from './controls';
@@ -1141,7 +1141,7 @@ export function mountApp(root: HTMLElement, initial: RawSceneInput = DEFAULT_INP
     let planets: readonly RawSceneControls['planets'][number][];
 
     if (button.dataset.action === 'add-planet') {
-      planets = [...input.planets, { ...DEFAULT_PLANET }];
+      planets = [...input.planets, randomPlanet()];
       // A newly added planet is always expanded (CX-003), so focus lands on a
       // visible control rather than inside a collapsed group.
       collapsedPlanets.delete(planets.length - 1);
