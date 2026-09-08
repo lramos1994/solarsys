@@ -62,7 +62,20 @@ export function documentShell(
     ` xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">` +
     metadata +
     COMPOSITING_STYLE +
-    `<g transform="translate(${CONTENT_OFFSET} ${CONTENT_OFFSET})">${content}</g>` +
+    // Clip everything to the exact viewBox rectangle. `overflow="hidden"` alone
+    // is NOT enough for a STANDALONE file: when the SVG is the document root the
+    // renderer scales the viewBox into a letterboxed viewport, and overflow
+    // clips to that viewport box, not the viewBox — so geometry at negative
+    // coordinates (entering comets, an overflowing outer ring, D-07 edge
+    // clipping) paints into the letterbox margins, outside the starfield. A
+    // clipPath tied to the viewBox rect clips in every renderer. The rect is
+    // offset by -CONTENT_OFFSET so, inside the translated content group's user
+    // space, it lands exactly on the viewBox origin.
+    `<defs><clipPath id="scene-clip">` +
+    `<rect x="${-CONTENT_OFFSET}" y="${-CONTENT_OFFSET}"` +
+    ` width="${viewBoxWidth}" height="${viewBoxHeight}"/>` +
+    `</clipPath></defs>` +
+    `<g transform="translate(${CONTENT_OFFSET} ${CONTENT_OFFSET})" clip-path="url(#scene-clip)">${content}</g>` +
     `</svg>`
   );
 }
