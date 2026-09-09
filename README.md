@@ -44,7 +44,7 @@ is sufficient; nothing else is required.
 ## Live application
 
 The application is deployed at
-**https://lramos1994.github.io/solarsys/** — every push to `main` rebuilds and
+**https://solarsys.lramos.dev/** — every push to `main` rebuilds and
 republishes it via GitHub Pages (`.github/workflows/deploy.yml`).
 
 ## Using the application
