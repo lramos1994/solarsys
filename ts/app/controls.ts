@@ -102,6 +102,60 @@ export const DEFAULT_PLANET: RawPlanetInput = {
 };
 
 /**
+ * Picks a random value inside a bounded field, snapped to the field's step so
+ * the result is a value the paired range/number widget could itself produce.
+ * The output is a raw control string, exactly what {@link readControls} yields,
+ * so it flows through the validator unchanged.
+ */
+function randomBounded(field: BoundedField): string {
+  const { min, max } = BOUNDS[field];
+  const step = stepOf(field);
+  const steps = Math.floor((max - min) / step);
+  const value = min + Math.round(Math.random() * steps) * step;
+
+  // Whole-step fields stay integer strings; fractional steps keep one decimal
+  // so the string matches the widget's own formatting (e.g. planet size 4.5).
+  return Number.isInteger(step) ? String(value) : value.toFixed(1);
+}
+
+/**
+ * Builds a planet with randomised parameters for the "add planet" action.
+ *
+ * Values are drawn within {@link BOUNDS} and step-snapped by
+ * {@link randomBounded}, so the planet always validates. Moon and ring are each
+ * present roughly half the time; when present their own fields are randomised
+ * too. Randomness here is UI convenience only — it never touches the generator's
+ * seed-determinism contract, since the produced values are ordinary raw control
+ * strings handed to the validator like any typed input.
+ */
+export function randomPlanet(): RawPlanetInput {
+  const moon: RawMoonInput | false =
+    Math.random() < 0.5
+      ? false
+      : {
+          size: randomBounded('moonSize'),
+          distance: randomBounded('moonDistance'),
+          period: randomBounded('moonPeriod'),
+        };
+
+  const ring: RawRingConfig | false =
+    Math.random() < 0.5
+      ? false
+      : {
+          type: RING_TYPES[Math.floor(Math.random() * RING_TYPES.length)] ?? DEFAULT_RING_CONFIG.type,
+          sizePercent: randomBounded('ringSize'),
+          inclinationDegrees: randomBounded('ringInclination'),
+        };
+
+  return {
+    size: randomBounded('planetSize'),
+    distance: { mode: 'scalar', value: randomBounded('orbitDistance') },
+    moon,
+    ring,
+  };
+}
+
+/**
  * Presentation-only view state (D-204, CD-007). It is never part of
  * `RawSceneInput`, never submitted, and never reaches the validator or the
  * generator. It lives in `mountApp` because the form is rebuilt wholesale with

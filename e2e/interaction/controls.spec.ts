@@ -253,8 +253,20 @@ test.describe('planet composition (CTL-003)', () => {
 
     await expect(planets).toHaveCount(4);
     await expect(orbits).toHaveCount(4);
-    await expect(planets.nth(3).locator('[data-control="planetSize"]')).toHaveValue('10');
-    await expect(planets.nth(3).locator('[data-control="planetDistance"]')).toHaveValue('50');
+
+    // The added planet now carries randomised parameters (product change), so
+    // assert the values fall within their bounds rather than fixed defaults.
+    const size = Number(
+      await planets.nth(3).locator('[data-control="planetSize"]').inputValue(),
+    );
+    const distance = Number(
+      await planets.nth(3).locator('[data-control="planetDistance"]').inputValue(),
+    );
+
+    expect(size).toBeGreaterThanOrEqual(1);
+    expect(size).toBeLessThanOrEqual(25);
+    expect(distance).toBeGreaterThanOrEqual(0);
+    expect(distance).toBeLessThanOrEqual(120);
   });
 
   test('removes the selected planet, its orbit, and its moon', async ({ page }) => {
