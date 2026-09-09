@@ -20,8 +20,8 @@ preview shows the first frame only):
 
 ## Requirements
 
-- Node.js 20.19+ or 22.12+ (the `engines` contract in `package.json`; `.nvmrc`
-  pins the Node 22 line for nvm users)
+- Node.js 22.22.3+ (the `engines` contract in `package.json`; `.nvmrc` pins the
+  minimum supported version for nvm users)
 - npm
 
 ## Setup
@@ -44,7 +44,7 @@ is sufficient; nothing else is required.
 ## Live application
 
 The application is deployed at
-**https://lramos1994.github.io/solarsys/** — every push to `main` rebuilds and
+**https://solarsys.lramos.dev/** — every push to `main` rebuilds and
 republishes it via GitHub Pages (`.github/workflows/deploy.yml`).
 
 ## Using the application
@@ -125,7 +125,17 @@ build the application and run Playwright against the served static output.
 ## Architecture
 
 See [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the full invariants and
-testing discipline.
+testing discipline. The versioned LikeC4 model lives in
+[`docs/architecture/`](docs/architecture/):
+
+```bash
+npm run architecture:dev       # inspect the model locally
+npm run architecture:validate  # check syntax, semantics, and layout
+npm run architecture:build     # write a static site to build/architecture/
+```
+
+`npm run build` empties `build/`, so run `npm run architecture:build` afterwards
+when both the application and architecture artifacts are needed.
 
 ```
 ts/generator/   pure, DOM-free scene generation: params + seed -> SVG string
