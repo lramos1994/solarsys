@@ -17,10 +17,13 @@
     "test:reduced-motion": "playwright test e2e/reduced-motion --project=chromium-reduced-motion",
     "test:presentation": "playwright test e2e/presentation --project=chromium --project=mobile-chrome --project=mobile-safari",
     "test:density": "playwright test e2e/density --project=chromium --project=mobile-chrome",
-    "test:all": "npm run test && npm run test:browser && npm run test:interaction && npm run test:density && npm run test:reduced-motion && npm run test:presentation"
+    "test:all": "npm run test && npm run test:browser && npm run test:interaction && npm run test:density && npm run test:reduced-motion && npm run test:presentation",
+    "architecture:dev": "node scripts/architecture-dev.mjs",
+    "architecture:validate": "likec4 validate docs/architecture",
+    "architecture:build": "likec4 build --title \"SolarSys architecture\" -o build/architecture docs/architecture"
   },
   "engines": {
-    "node": "^20.19.0 || >=22.12.0"
+    "node": ">=22.22.3"
   },
   "repository": {
     "type": "git",
@@ -35,6 +38,7 @@
   "devDependencies": {
     "@playwright/test": "^1.62.1",
     "fast-xml-parser": "^5.11.0",
+    "likec4": "1.59.3",
     "linkedom": "^0.18.13",
     "typescript": "^7.0.2",
     "vite": "^8.2.2",

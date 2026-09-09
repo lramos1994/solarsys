@@ -1,0 +1,97 @@
+specification {
+  element person
+  element system
+  element component
+}
+
+model {
+  user = person 'SolarSys user' {
+    description 'Configures a solar-system scene, previews it, and downloads the generated SVG.'
+  }
+
+  solarsys = system 'SolarSys' {
+    description 'A client-side TypeScript application that generates animated solar-system SVG scenes.'
+
+    browser = component 'Browser application' {
+      description 'The DOM-owned application shell running entirely in the user browser.'
+
+      ui = component 'Controls and dialogs' {
+        description 'Collects scene controls, renders dialogs, and presents actions, status, and inline validation errors.'
+      }
+
+      validation = component 'Validation boundary' {
+        description 'Parses raw controls, enforces bounds, and resolves valid scene parameters before generation.'
+      }
+
+      store = component 'Scene store' {
+        description 'Generates a valid scene once, retains its serialized SVG, and preserves the prior scene after rejection.'
+      }
+
+      generator = component 'Pure SVG generator' {
+        description 'A DOM-free transformation from valid parameters and an explicit seed to one SVG string.'
+
+        composition = component 'Scene composition' {
+          description 'Coordinates layers in contractual paint and generation order.'
+        }
+
+        identity = component 'Seeded identity' {
+          description 'Threads the seeded PRNG and seed-derived ID counter through rendering.'
+        }
+
+        renderers = component 'Layer renderers' {
+          description 'Render background stars, belt, orbits, sun, planets, moons, rings, and comets.'
+        }
+
+        document = component 'SVG document shell' {
+          description 'Wraps self-contained SVG content with metadata, styles, and the responsive viewBox.'
+        }
+
+        composition -> identity 'uses deterministic randomness and identifiers'
+        composition -> renderers 'renders ordered scene layers'
+        composition -> document 'serializes the completed scene'
+      }
+
+      preview = component 'SVG preview and overlay' {
+        description 'Renders the stored SVG, applies playback state, and draws application-owned orbit emphasis.'
+      }
+
+      playback = component 'Playback controller' {
+        description 'Applies pause or resume to the live SVG and honours the initial reduced-motion preference.'
+      }
+
+      download = component 'SVG download' {
+        description 'Writes the stored SVG string without regenerating it.'
+      }
+
+      ui -> validation 'submits raw scene controls'
+      ui -> playback 'requests play or pause'
+      validation -> store 'supplies valid parameters and fixed seed'
+      store -> generator 'generates once'
+      store -> preview 'supplies stored SVG'
+      store -> download 'supplies the same stored SVG'
+      playback -> preview 'controls live SVG animation'
+    }
+
+    user -> browser 'uses to configure, preview, and download scenes'
+    user -> solarsys 'uses in a browser'
+  }
+}
+
+views {
+  view context {
+    title 'SolarSys system context'
+    include user, solarsys
+  }
+
+  view of browser {
+    title 'Browser application components'
+    include *
+    autoLayout LeftRight 150 100
+  }
+
+  view of generator {
+    title 'Pure SVG generator components'
+    include *
+    autoLayout LeftRight 150 100
+  }
+}
