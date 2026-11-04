@@ -5,7 +5,9 @@ Planets orbit a sun along cubic Bezier paths using SVG `animateMotion`, with
 optional moons, rings, a starfield, a rotating asteroid belt, and comets.
 
 Everything runs in the browser. There is no server runtime, no database, and no
-network request involved in generating, previewing, or downloading a scene.
+network request involved in generating, previewing, or downloading a scene. The
+hosted page loads the Cloudflare Web Analytics beacon for anonymous visit
+counts; it never sees scene parameters and is not part of the generator.
 
 ## Examples
 
@@ -142,7 +144,6 @@ ts/generator/   pure, DOM-free scene generation: params + seed -> SVG string
 ts/app/         the DOM layer: controls, validation, store, preview, download
 tests-ts/       headless suites (geometry parity, determinism, structural)
 e2e/            Playwright suites (browser, interaction, reduced motion, presentation)
-openspec/       the migration's specs, design, traceability, and tasks
 ```
 
 The application chrome (dark minimal theme, responsive two-pane layout, planet

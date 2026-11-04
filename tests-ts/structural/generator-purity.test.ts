@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 /**
  * Task 1.3 (WAL-006): the generator stays free of export concerns.
  *
- * The export pipeline (seek-and-bake, loop closure, MP4 encoding) lives in
- * `ts/app/wallpaper.ts`; nothing under `ts/generator/` may reference it. This
+ * Any export pipeline (seek-and-bake, loop closure, video encoding) belongs in
+ * the app layer; nothing under `ts/generator/` may reference it. This
  * is a STATIC assertion: it reads every generator source file and fails on any
  * token that would indicate an export concern — video export, loop length,
  * frame rate, or output resolution (WAL-006 "Generator remains free of export

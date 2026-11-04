@@ -1,14 +1,15 @@
 name: CI
 
-# PR-only: branch protection requires this check green (with the branch up to
+# PR-only: branch protection requires these checks green (with the branch up to
 # date) before merging, so a post-merge push re-run would test identical bytes.
-# Pushes to main only trigger the light Pages deploy.
+# Pushes to main run the same gates in deploy.yml before publishing.
 #
-# Scope: typecheck + the headless Vitest layers (geometry, determinism,
-# structural — no browser). The Playwright matrix (browser, interaction,
-# density, reduced-motion, presentation) is deliberately NOT run here: it is
-# calibrated for a developer machine and is flaky-slow on shared runners.
-# Run `npm run test:all` locally before opening a PR.
+# Scope: typecheck, the headless Vitest layers, a production build, and the
+# Playwright interaction suite on Chromium (behavioural, not timing-sensitive).
+# The timing-calibrated suites (browser cadence, density, presentation) are
+# deliberately NOT run here: they are calibrated for a developer machine and
+# are flaky-slow on shared runners. Run `npm run test:all` locally before
+# opening a PR.
 on:
   pull_request:
 
@@ -39,3 +40,37 @@ jobs:
 
       - name: Test (headless layers)
         run: npm run test
+
+      - name: Build
+        run: npm run build
+
+  e2e:
+    name: Interaction tests (Chromium)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Test (interaction)
+        run: npm run test:interaction
+
+      - name: Upload Playwright artifacts
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-artifacts
+          path: e2e/.artifacts
+          if-no-files-found: ignore

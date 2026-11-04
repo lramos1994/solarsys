@@ -4,7 +4,9 @@ SolarSys is a client-side TypeScript web application that generates animated
 solar-system SVG scenes. Users adjust parameters, see a live preview, and
 download the previewed scene as a self-contained SVG file. There is no server
 runtime, no database, and no network request in the generate/preview/download
-path.
+path. The only network request the hosted page makes is the Cloudflare Web
+Analytics beacon loaded by `ts/app/index.html`; it is independent of the
+generator and never receives scene data.
 
 ## Layout
 
@@ -14,7 +16,6 @@ ts/app/        DOM layer: controls, validation, store, preview host, download
 tests-ts/      headless suites: geometry, determinism, structural
 e2e/           Playwright suites: browser, interaction, reduced-motion,
                presentation, density
-openspec/      specs, design decisions, traceability, tasks
 ```
 
 **The generator is pure.** It never imports UI code and never touches the DOM.
