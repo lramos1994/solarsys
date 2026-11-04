@@ -118,10 +118,10 @@ describe('document shell', () => {
    * smooth standalone — application CSS could not do this.
    *
    * It must be `will-change`, never `transform: translateZ(0)`: a CSS
-   * transform overrides the SVG `transform` ATTRIBUTE, and the wallpaper bake
-   * (`ts/app/wallpaper.ts`) writes the resolved `transform="matrix(...)"` onto
-   * each animated node. `translateZ(0)` would win over that matrix and
-   * collapse every planet to its base position in the exported wallpaper.
+   * transform overrides the SVG `transform` ATTRIBUTE, and any raster export
+   * that seeks and bakes frames writes the resolved `transform="matrix(...)"`
+   * onto each animated node. `translateZ(0)` would win over that matrix and
+   * collapse every planet to its base position in the baked frame.
    */
   it('promotes animated groups to their own layer without applying a transform', () => {
     const svg = documentShell({ width: 300, height: 300 }, '');
